@@ -37,7 +37,7 @@
  */
 
 // Change EEPROM version if the structure changes
-#define EEPROM_VERSION "V56"
+#define EEPROM_VERSION "M01"   //小树定制固件,专属eeprom版本号,原版格式为Vnn\0
 #define EEPROM_OFFSET 100
 
 // Check the integrity of data offsets.
@@ -93,7 +93,8 @@ typedef struct PIDC { float Kp, Ki, Kd, Kc; } PIDC;
  * EEPROM size is known at compile time!
  */
 typedef struct SettingsDataStruct {
-  char      version[4];                                 // Vnn\0
+  //小树定制固件，version改为//Mnn\0。数组长度改为动态长度
+  char      version[sizeof(EEPROM_VERSION)];                                 // Vnn\0
   uint16_t  crc;                                        // Data Checksum
 
   //
@@ -112,7 +113,16 @@ typedef struct SettingsDataStruct {
             planner_min_travel_feedrate_mm_s,               // M205 T           planner.min_travel_feedrate_mm_s
             planner_max_jerk[NUM_AXIS],                     // M205 XYZE/ABCDE  planner.max_jerk[NUM_AXIS]
             planner_junction_deviation_mm;                  // M205 J           planner.junction_deviation_mm
-
+  //小树定制固件新增菜单
+  //电机方向
+  bool planner_invert_dir[NUM_AXIS_N];
+  
+  //屏幕旋钮方向
+  bool planner_encoder_dir;
+  //静音驱动电流控制
+  //归原点xy坐标
+  float planner_homing_des[2];
+  
   float home_offset[XYZ];                               // M206 XYZ
 
   #if HOTENDS > 1
@@ -379,8 +389,8 @@ void MarlinSettings::postprocess() {
   #else
     #define _FIELD_TEST(FIELD) NOOP
   #endif
-
-  const char version[4] = EEPROM_VERSION;
+  //小树定制固件，version数值原始长度为4，这里改为动态长度
+  const char version[sizeof(EEPROM_VERSION)] = EEPROM_VERSION;
 
   bool MarlinSettings::eeprom_error, MarlinSettings::validating;
 
@@ -453,6 +463,7 @@ void MarlinSettings::postprocess() {
     EEPROM_WRITE(planner.min_segment_time_us);
     EEPROM_WRITE(planner.axis_steps_per_mm);
     EEPROM_WRITE(planner.max_feedrate_mm_s);
+	
     EEPROM_WRITE(planner.acceleration);
     EEPROM_WRITE(planner.retract_acceleration);
     EEPROM_WRITE(planner.travel_acceleration);
@@ -475,6 +486,16 @@ void MarlinSettings::postprocess() {
       EEPROM_WRITE(dummy);
     #endif
 
+	//小树定制固件，新增菜单
+	//电机方向
+    EEPROM_WRITE(planner.invert_dir);
+	
+  //屏幕旋钮方向
+    EEPROM_WRITE(planner.encoder_dir);
+  //静音驱动电流控制
+	//归原点xy坐标
+    EEPROM_WRITE(planner.homing_des);
+  
     _FIELD_TEST(home_offset);
 
     #if !HAS_HOME_OFFSET
@@ -1030,16 +1051,17 @@ void MarlinSettings::postprocess() {
     uint16_t working_crc = 0;
 
     EEPROM_START();
-
-    char stored_ver[4];
+    //小树定制固件，版本号长度改为动态长度，原版为4
+    char stored_ver[sizeof(EEPROM_VERSION)];
     EEPROM_READ_ALWAYS(stored_ver);
 
     uint16_t stored_crc;
     EEPROM_READ_ALWAYS(stored_crc);
 
     // Version has to match or defaults are used
-    if (strncmp(version, stored_ver, 3) != 0) {
-      if (stored_ver[3] != '\0') {
+    //小树定制固件，默认长度为3，这里改为动态长度，offset长度-1
+    if (strncmp(version, stored_ver, sizeof(EEPROM_VERSION)-1) != 0) {
+      if (stored_ver[(sizeof(EEPROM_VERSION)-1)] != '\0') {
         stored_ver[0] = '?';
         stored_ver[1] = '\0';
       }
@@ -1086,7 +1108,7 @@ void MarlinSettings::postprocess() {
         planner.axis_steps_per_mm[i]          = i < MOV_AXIS + esteppers ? tmp2[i] : def2[i < COUNT(def2) ? i : COUNT(def2) - 1];
         planner.max_feedrate_mm_s[i]          = i < MOV_AXIS + esteppers ? tmp3[i] : def3[i < COUNT(def3) ? i : COUNT(def3) - 1];
       }
-
+	  
       EEPROM_READ(planner.acceleration);
       EEPROM_READ(planner.retract_acceleration);
       EEPROM_READ(planner.travel_acceleration);
@@ -1100,6 +1122,31 @@ void MarlinSettings::postprocess() {
         EEPROM_READ(planner.max_jerk);
         EEPROM_READ(dummy);
       #endif
+
+	  //新增菜单
+	  //电机方向
+	  bool tmp4[MOV_AXIS + esteppers];
+	  EEPROM_READ(tmp4);
+      LOOP_NUM_AXIS_N(i) {
+        planner.invert_dir[i] = i < COUNT(tmp4) ? tmp4[i] : true;
+      }
+	  
+		//屏幕旋钮方向
+	  EEPROM_READ(planner.encoder_dir);
+		//屏幕旋钮灵敏度
+//	  EEPROM_READ(planner.encoder_pulses_per_step);
+	    //屏幕旋钮上下灵敏度
+//	  EEPROM_READ(planner.encoder_step_per_item);
+		
+  //静音驱动电流控制
+//	  bool tmp5[MOV_AXIS + esteppers];
+//	  EEPROM_READ(tmp5);
+//      LOOP_NUM_AXIS_N(i) {
+//        planner.tmc_currents[i] = i < COUNT(tmp4) ? tmp4[i] : 800;
+//      }
+	  
+	  //归原点xy坐标
+	  EEPROM_READ(planner.homing_des);
 
       //
       // Home Offset (M206)
@@ -1835,6 +1882,37 @@ void MarlinSettings::reset() {
     planner.max_jerk[E_AXIS] = DEFAULT_EJERK;
   #endif
 
+	//添加菜单
+	//4个电机方向
+	bool Invert_DIR_Default[NUM_AXIS_N];
+	memset(Invert_DIR_Default, true, sizeof(Invert_DIR_Default));
+	#ifdef INVERT_X_DIR
+		Invert_DIR_Default[X_AXIS] = INVERT_X_DIR;
+	#endif
+	#ifdef INVERT_Y_DIR
+		Invert_DIR_Default[Y_AXIS] = INVERT_Y_DIR;
+	#endif
+	#ifdef INVERT_Z_DIR
+		Invert_DIR_Default[Z_AXIS] = INVERT_Z_DIR;
+	#endif
+	#ifdef INVERT_E0_DIR
+		Invert_DIR_Default[E_AXIS] = INVERT_E0_DIR;
+	#endif
+  LOOP_NUM_AXIS_N(i) {
+	planner.invert_dir[i] = Invert_DIR_Default[i];
+  }
+  //屏幕旋钮方向
+  #ifdef REVERSE_ENCODER_DIRECTION
+    planner.encoder_dir = true;
+  #else
+    planner.encoder_dir = false;
+  #endif
+  //静音驱动电流控制
+	//归原点xy坐标
+	planner.homing_des[X_AXIS] = 10;
+	planner.homing_des[Y_AXIS] = 10;
+	
+  
   #if HAS_HOME_OFFSET
     ZERO(home_offset);
   #endif

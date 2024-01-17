@@ -324,8 +324,8 @@ class Stepper {
     //
     static int8_t count_direction[NUM_AXIS];
 
-  public:
 
+  public:
     //
     // Constructor / initializer
     //
@@ -453,8 +453,22 @@ class Stepper {
 
       if (was_enabled) ENABLE_STEPPER_DRIVER_INTERRUPT();
     }
-
+	
+	//新增菜单
+	//刷新电机方向
+    static void reset_directions(){
+		set_directions();
+	}
+	
+  //屏幕旋钮方向
+    static void set_encoder_directions(){
+		
+	}
+	
   private:
+
+    // Set direction bits for all steppers
+    static void set_directions();
 
     // Set the current position in steps
     static void _set_position(const int32_t &a, const int32_t &b, const int32_t &c
@@ -463,9 +477,6 @@ class Stepper {
       #endif
       , const int32_t &e
     );
-
-    // Set direction bits for all steppers
-    static void set_directions();
 
     // Allow reset_stepper_drivers to access private set_directions
     friend void reset_stepper_drivers();

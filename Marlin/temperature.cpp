@@ -157,7 +157,7 @@ int16_t Temperature::current_temperature_raw[HOTENDS] = { 0 },
 #endif
 
 #if ENABLED(PREVENT_COLD_EXTRUSION)
-  bool Temperature::allow_cold_extrude = false;
+  bool Temperature::allow_cold_extrude = true;
   int16_t Temperature::extrude_min_temp = EXTRUDE_MINTEMP;
 #endif
 
@@ -1028,6 +1028,7 @@ void Temperature::calculate_celsius_temperatures() {
   HOTEND_LOOP() current_temperature[e] = analog_to_celsius_hotend(current_temperature_raw[e], e);
   #if HAS_HEATED_BED
     current_temperature_bed = analog_to_celsius_bed(current_temperature_bed_raw);
+	if (current_temperature_bed < -5){ current_temperature_bed = 0; }
   #endif
   #if HAS_TEMP_CHAMBER
     current_temperature_chamber = analog_to_celsius_chamber(current_temperature_chamber_raw);
@@ -1654,7 +1655,7 @@ void Temperature::set_current_temp_raw() {
   #endif
 
   #if HAS_HEATED_BED
-    current_temperature_bed_raw = raw_temp_bed_value;
+	current_temperature_bed_raw = raw_temp_bed_value;
   #endif
   #if HAS_TEMP_CHAMBER
     current_temperature_chamber_raw = raw_temp_chamber_value;
@@ -2184,7 +2185,11 @@ void Temperature::isr() {
         HAL_START_ADC(TEMP_BED_PIN);
         break;
       case MeasureTemp_BED:
-        ACCUMULATE_ADC(raw_temp_bed_value);
+		if (raw_temp_bed_value < -5){
+			ACCUMULATE_ADC(raw_temp_bed_value);
+		}else{
+			ACCUMULATE_ADC(raw_temp_bed_value);
+		}
         break;
     #endif
 

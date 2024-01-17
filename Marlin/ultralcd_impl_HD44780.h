@@ -1115,7 +1115,7 @@ static void lcd_implementation_status_screen() {
 
       char c;
       while (n && (c = *outstr)) {
-        n -= charset_mapper(c);
+        n -= lcd_print_and_count(c);
         ++outstr;
       }
       while (n) { --n; lcd.write(' '); }

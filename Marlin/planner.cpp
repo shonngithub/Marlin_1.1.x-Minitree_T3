@@ -112,6 +112,21 @@ float Planner::max_feedrate_mm_s[NUM_AXIS_N], // (mm/s) M203 XYZE - Max speeds
       Planner::retract_acceleration,          // (mm/s^2) M204 R - Retract acceleration. Filament pull-back and push-forward while standing still in the other axes
       Planner::travel_acceleration,           // (mm/s^2) M204 T - Travel acceleration. DEFAULT ACCELERATION for all NON printing moves.
       Planner::min_travel_feedrate_mm_s;      // (mm/s) M205 T - Minimum travel feedrate
+//小树定制固件,新增功能
+//电机方向
+bool Planner::invert_dir[NUM_AXIS_N];
+//屏幕旋钮方向
+bool Planner::encoder_dir;
+//屏幕旋钮灵敏度
+uint32_t Planner::encoder_pulses_per_step;
+//屏幕旋钮上下灵敏度
+uint32_t Planner::encoder_step_per_item;
+//静音驱动电流控制
+uint32_t Planner::tmc_currents[NUM_AXIS_N];
+//归原点xy坐标
+float Planner::homing_des[2];
+//冷挤出保护
+bool Planner::prevent_cold_extrusion = false;
 
 #if ENABLED(JUNCTION_DEVIATION)
   float Planner::junction_deviation_mm;       // (mm) M205 J

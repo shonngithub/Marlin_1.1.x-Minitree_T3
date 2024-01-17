@@ -366,11 +366,11 @@ void Stepper::set_directions() {
 
   #define SET_STEP_DIR(A) \
     if (motor_direction(_AXIS(A))) { \
-      A##_APPLY_DIR(INVERT_## A##_DIR, false); \
+      A##_APPLY_DIR(planner.invert_dir[_AXIS(A)], false); \
       count_direction[_AXIS(A)] = -1; \
     } \
     else { \
-      A##_APPLY_DIR(!INVERT_## A##_DIR, false); \
+      A##_APPLY_DIR(!planner.invert_dir[_AXIS(A)], false); \
       count_direction[_AXIS(A)] = 1; \
     }
 
@@ -386,7 +386,16 @@ void Stepper::set_directions() {
   #if ENABLED(HANGPRINTER)
     SET_STEP_DIR(D);
   #endif
-
+  //新增小树专用挤出机方向修改，注意：仅限单挤出机！！
+  if (motor_direction(E_AXIS)) {
+    E0_DIR_WRITE(planner.invert_dir[_AXIS(E)]);
+    count_direction[E_AXIS] = -1;
+  }
+  else {
+    E0_DIR_WRITE(!planner.invert_dir[_AXIS(E)]);
+    count_direction[E_AXIS] = 1;
+  }
+  /* 注释掉原本挤出机方向修改的代码
   #if DISABLED(LIN_ADVANCE)
     #if ENABLED(MIXING_EXTRUDER)
       if (motor_direction(E_AXIS)) {
@@ -408,6 +417,7 @@ void Stepper::set_directions() {
       }
     #endif
   #endif // !LIN_ADVANCE
+  */
 
   // A small delay may be needed after changing direction
   #if MINIMUM_STEPPER_DIR_DELAY > 0

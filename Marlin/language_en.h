@@ -1098,5 +1098,32 @@
     #define MSG_FILAMENT_CHANGE_RESUME_1        _UxGT("Resuming...")
   #endif
 #endif // LCD_HEIGHT < 4
-
+//新增菜单名称
+#ifndef MSG_X_INVERT_DIR
+	#define MSG_X_INVERT_DIR						_UxGT("X Direction")
+#endif
+#ifndef MSG_Y_INVERT_DIR
+	#define MSG_Y_INVERT_DIR						_UxGT("Y Direction")
+#endif
+#ifndef MSG_Z_INVERT_DIR
+	#define MSG_Z_INVERT_DIR						_UxGT("Z Direction")
+#endif
+#ifndef MSG_E_INVERT_DIR
+	#define MSG_E_INVERT_DIR						_UxGT("E Direction")
+#endif
+#ifndef MSG_STEPS_SETTING
+	#define MSG_STEPS_SETTING						_UxGT("Steps Setting")
+#endif
+#ifndef MSG_STEPS_SETTING
+	#define MSG_STEPS_SETTING						_UxGT("Steps Setting")
+#endif
+#ifndef MSG_INVERT_DIR
+	#define MSG_INVERT_DIR							_UxGT("Invert DIR")
+#endif
+#ifndef MSG_SETTING_MENU
+	#define MSG_SETTING_MENU						_UxGT("Settings")
+#endif
+#ifndef MSG_STEPS_SETTING
+	#define MSG_STEPS_SETTING						_UxGT("Steps Setting")
+#endif
 #endif // LANGUAGE_EN_H

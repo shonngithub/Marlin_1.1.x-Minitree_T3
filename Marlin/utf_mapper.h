@@ -653,7 +653,187 @@
     seen_c3 = seen_c4 = seen_c5 = false;
     return 1;
   }
+  
+#elif ENABLED(MAPPER_HASHCN)
+#define DEBUG 1
+//新增中文自动转码支持
+//#include <HashMap.h>
+//HashType<char*,uint8_t> hashRawArray[128];
+//HashMap<char*,uint8_t> hashMap = HashMap<char*,uint8_t>(hashRawArray , 128);
 
+//FORCE_INLINE void Init_HashMap(){
+//	hashMap[0]("方", 0x97u); //方
+//	hashMap[1]("向", 0x98u); //向
+//}
+struct UTF8_mapping {
+  const char *utf8;
+  unsigned char replacement;
+};
+
+const PROGMEM UTF8_mapping mappings[] = {
+  {"按", 0x7Du},
+  {"○", 0x7Eu},
+  {"⊿", 0x7Fu},
+  {"³", 0x80u},
+  {"试", 0x81u},
+  {"条", 0x82u},
+  {"测", 0x83u},
+  {"校", 0x84u},
+  {"归", 0x85u},
+  {"下", 0x86u},
+  {"个", 0x87u},
+  {"完", 0x88u},
+  {"成", 0x89u},
+  {"高", 0x8Au},
+  {"网", 0x8Bu},
+  {"格", 0x8Cu},
+  {"编", 0x8Du},
+  {"辑", 0x8Eu},
+  {"标", 0x8Fu},
+  {"坐", 0x90u},
+  {"一", 0x91u},
+  {"抖", 0x92u},
+  {"加", 0x93u},
+  {"位", 0x94u},
+  {"限", 0x95u},
+  {"卸", 0x96u},
+  {"方", 0x97u},
+  {"向", 0x98u},
+  {"击", 0x99u},
+  {"启", 0x9Au},
+  {"中", 0x9Bu},
+  {"换", 0x9Cu},
+  {"统", 0x9Du},
+  {"败", 0x9Eu},
+  {"失", 0x9Fu},
+  {"先", 0xA0u},
+  {"到", 0xA1u},
+  {"三", 0xA2u},
+  {"长", 0xA3u},
+  {"准", 0xA4u},
+  {"备", 0xA5u},
+  {"就", 0xA6u},
+  {"绪", 0xA7u},
+  {"卡", 0xA8u},
+  {"已", 0xA9u},
+  {"插", 0xAAu},
+  {"入", 0xABu},
+  {"冷", 0xACu},
+  {"出", 0xADu},
+  {"主", 0xAEu},
+  {"菜", 0xAFu},
+  {"单", 0xB0u},
+  {"自", 0xB1u},
+  {"动", 0xB2u},
+  {"开", 0xB3u},
+  {"始", 0xB4u},
+  {"关", 0xB5u},
+  {"闭", 0xB6u},
+  {"步", 0xB7u},
+  {"进", 0xB8u},
+  {"电", 0xB9u},
+  {"机", 0xBAu},
+  {"回", 0xBBu},
+  {"原", 0xBCu},
+  {"点", 0xBDu},
+  {"设", 0xBEu},
+  {"置", 0xBFu},
+  {"偏", 0xC0u},
+  {"移", 0xC1u},
+  {"定", 0xC2u},
+  {"预", 0xC3u},
+  {"热", 0xC4u},
+  {"所", 0xC5u},
+  {"有", 0xC6u},
+  {"床", 0xC7u},
+  {"量", 0xC8u},
+  {"温", 0xC9u},
+  {"打", 0xCAu},
+  {"源", 0xCBu},
+  {"挤", 0xCCu},
+  {"抽", 0xCDu},
+  {"轴", 0xCEu},
+  {"调", 0xCFu},
+  {"平", 0xD0u},
+  {"速", 0xD1u},
+  {"度", 0xD2u},
+  {"喷", 0xD3u},
+  {"嘴", 0xD4u},
+  {"风", 0xD5u},
+  {"扇", 0xD6u},
+  {"边", 0xD7u},
+  {"控", 0xD8u},
+  {"制", 0xD9u},
+  {"最", 0xDAu},
+  {"小", 0xDBu},
+  {"大", 0xDCu},
+  {"输", 0xDDu},
+  {"料", 0xDEu},
+  {"运", 0xDFu},
+  {"耗", 0xE0u},
+  {"材", 0xE1u},
+  {"对", 0xE2u},
+  {"比", 0xE3u},
+  {"载", 0xE4u},
+  {"保", 0xE5u},
+  {"存", 0xE6u},
+  {"恢", 0xE7u},
+  {"复", 0xE8u},
+  {"低", 0xE9u},
+  {"更", 0xEAu},
+  {"新", 0xEBu},
+  {"信", 0xECu},
+  {"息", 0xEDu},
+  {"填", 0xEEu},
+  {"充", 0xEFu},
+  {"整", 0xF0u},
+  {"暂", 0xF1u},
+  {"停", 0xF2u},
+  {"印", 0xF3u},
+  {"继", 0xF4u},
+  {"续", 0xF5u},
+  {"止", 0xF6u},
+  {"心", 0xF7u},
+  {"储", 0xF8u},
+  {"无", 0xF9u},
+  {"休", 0xFAu},
+  {"眠", 0xFBu},
+  {"等", 0xFCu},
+  {"待", 0xFDu},
+  {"废", 0xFEu},
+  {"作", 0xFFu},
+};
+
+const uint16_t nbElements = sizeof(mappings) / sizeof(mappings[0]);
+
+char UTF8ToChar(const char* str){
+	for (int i = 0; i < nbElements; i++){
+		UTF8_mapping mapping;
+		memcpy_P(&mapping, &mappings[i], sizeof(mapping));
+		if(strncmp(str, mapping.utf8, strlen(mapping.utf8)) == 0){
+			return mapping.replacement;
+		}
+	}
+	return '?';
+}
+char charset_mapper(const char c) {
+	  static char str[3];
+	  static int n = 0;
+	  uint8_t d = c;
+	  if(d >=0x7Bu || n > 0){
+		  str[n] = d;
+		  n++;
+		  if(n==3){
+			  HARDWARE_CHAR_OUT(UTF8ToChar(str));
+			  n = 0;
+			  return 1;
+		  }
+		  return 0;
+	  }else{
+		  HARDWARE_CHAR_OUT(d);
+		  return 1;
+	  }
+}
 #else
 
   #define MAPPER_NON

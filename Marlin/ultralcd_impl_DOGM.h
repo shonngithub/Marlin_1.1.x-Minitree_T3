@@ -141,8 +141,13 @@
 #define FONT_MENU 4
 
 // DOGM parameters (size in pixels)
-#define DOG_CHAR_WIDTH         6
-#define DOG_CHAR_HEIGHT        12
+#if LCD_LANGUAGE == cn
+  #define DOG_CHAR_WIDTH         6
+  #define DOG_CHAR_HEIGHT        12
+#else
+  #define DOG_CHAR_WIDTH         6
+  #define DOG_CHAR_HEIGHT        12
+#endif
 #if ENABLED(USE_BIG_EDIT_FONT)
   #define FONT_MENU_EDIT_NAME u8g_font_9x18
   #define DOG_CHAR_WIDTH_EDIT  9
@@ -627,7 +632,10 @@ void lcd_implementation_clear() { } // Automatically cleared by Picture Loop
       char c;
       uint8_t n = maxlen;
       while (n && (c = *outstr)) {
-        n -= lcd_print_and_count(c);
+        //n -= lcd_print_and_count(c);
+		//暂时修复了更改mapping后汉字文件名字数不准确的bug。
+		u8g.print(c);
+		--n;
         ++outstr;
       }
       while (n) { --n; u8g.print(' '); }

@@ -454,6 +454,9 @@ class Temperature {
             celsius
           #endif
         ;
+		if (target_temperature_bed < -5){
+			target_temperature_bed = 0;
+		}
         #if WATCH_THE_BED
           start_watching_bed();
         #endif

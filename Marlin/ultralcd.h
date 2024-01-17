@@ -263,3 +263,7 @@
 #endif
 
 #endif // ULTRALCD_H
+
+//新增菜单
+  void _lcd_settings_menu();
+  void _lcd_settings_invert_dir();

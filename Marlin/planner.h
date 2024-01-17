@@ -203,6 +203,22 @@ class Planner {
                  retract_acceleration,          // (mm/s^2) M204 R - Retract acceleration. Filament pull-back and push-forward while standing still in the other axes
                  travel_acceleration,           // (mm/s^2) M204 T - Travel acceleration. DEFAULT ACCELERATION for all NON printing moves.
                  min_travel_feedrate_mm_s;      // (mm/s) M205 T - Minimum travel feedrate
+				 
+	//新增菜单电机方向
+	static bool invert_dir[NUM_AXIS_N];
+
+  //屏幕旋钮方向
+  static bool encoder_dir;
+  //屏幕旋钮灵敏度
+  static uint32_t encoder_pulses_per_step;
+  //屏幕旋钮上下灵敏度
+  static uint32_t encoder_step_per_item;
+  //静音驱动电流控制
+  static uint32_t tmc_currents[NUM_AXIS_N];
+  //归原点xy坐标
+  static float homing_des[2];
+  //冷挤出保护，不保存到eeprom
+  static bool prevent_cold_extrusion;
 
     #if ENABLED(JUNCTION_DEVIATION)
       static float junction_deviation_mm;       // (mm) M205 J
@@ -807,7 +823,7 @@ class Planner {
       static void getHighESpeed();
       static void autotemp_M104_M109();
     #endif
-
+	
     #if ENABLED(JUNCTION_DEVIATION)
       FORCE_INLINE static void recalculate_max_e_jerk() {
         #define GET_MAX_E_JERK(N) SQRT(SQRT(0.5) * junction_deviation_mm * (N) * RECIPROCAL(1.0 - SQRT(0.5)))

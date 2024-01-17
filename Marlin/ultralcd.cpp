@@ -1082,7 +1082,7 @@ void lcd_quick_feedback(const bool clear_buttons) {
     #if defined(USER_DESC_5) && defined(USER_GCODE_5)
       void lcd_user_gcode_5() { _lcd_user_gcode(PSTR(USER_GCODE_5 _DONE_SCRIPT)); }
     #endif
-
+	
     void _lcd_user_menu() {
       START_MENU();
       MENU_BACK(MSG_MAIN);
@@ -1105,7 +1105,6 @@ void lcd_quick_feedback(const bool clear_buttons) {
     }
 
   #endif
-
   /**
    *
    * "Main" menu
@@ -1119,6 +1118,7 @@ void lcd_quick_feedback(const bool clear_buttons) {
     #if ENABLED(CUSTOM_USER_MENUS)
       MENU_ITEM(submenu, MSG_USER_MENU, _lcd_user_menu);
     #endif
+	MENU_ITEM(submenu, MSG_SETTING_MENU, _lcd_settings_menu);
 
     //
     // Debug Menu when certain options are enabled
@@ -1190,9 +1190,9 @@ void lcd_quick_feedback(const bool clear_buttons) {
     /**
      * Set the home offset based on the current_position
      */
-    void lcd_set_home_offsets() {
+    void lcd_set_home_offsets() { //屏幕设置原点偏移
       // M428 Command
-      enqueue_and_echo_commands_P(PSTR("M428"));
+      enqueue_and_echo_commands_P(PSTR("M428\nM500\nM501"));
       lcd_return_to_status();
     }
   #endif
@@ -1713,7 +1713,8 @@ void lcd_quick_feedback(const bool clear_buttons) {
       MENU_BACK(MSG_PREPARE);
       #if HOTENDS == 1
         #if HAS_HEATED_BED
-          MENU_ITEM(function, MSG_PREHEAT_1, lcd_preheat_m1_e0);
+          //小树定制固件，移除预热所有选项
+          //MENU_ITEM(function, MSG_PREHEAT_1_ALL, lcd_preheat_m1_e0);
           MENU_ITEM(function, MSG_PREHEAT_1_END, lcd_preheat_m1_e0_only);
         #else
           MENU_ITEM(function, MSG_PREHEAT_1, lcd_preheat_m1_e0_only);
@@ -1765,7 +1766,8 @@ void lcd_quick_feedback(const bool clear_buttons) {
       MENU_BACK(MSG_PREPARE);
       #if HOTENDS == 1
         #if HAS_HEATED_BED
-          MENU_ITEM(function, MSG_PREHEAT_2, lcd_preheat_m2_e0);
+          //小树定制固件，移除预热所有选项
+          //MENU_ITEM(function, MSG_PREHEAT_2_ALL, lcd_preheat_m2_e0);
           MENU_ITEM(function, MSG_PREHEAT_2_END, lcd_preheat_m2_e0_only);
         #else
           MENU_ITEM(function, MSG_PREHEAT_2, lcd_preheat_m2_e0_only);
@@ -1853,6 +1855,7 @@ void lcd_quick_feedback(const bool clear_buttons) {
     static void lcd_load_settings()    { lcd_completion_feedback(settings.load()); }
   #endif
 
+	
   #if ENABLED(LEVEL_BED_CORNERS)
 
     #ifndef LEVEL_CORNERS_Z_HOP
@@ -2796,7 +2799,8 @@ void lcd_quick_feedback(const bool clear_buttons) {
       //
       #if TEMP_SENSOR_1 != 0 || TEMP_SENSOR_2 != 0 || TEMP_SENSOR_3 != 0 || TEMP_SENSOR_4 != 0 || HAS_HEATED_BED
         MENU_ITEM(submenu, MSG_PREHEAT_1, lcd_preheat_m1_menu);
-        MENU_ITEM(submenu, MSG_PREHEAT_2, lcd_preheat_m2_menu);
+        //小树定制固件，移除abs选项
+        //MENU_ITEM(submenu, MSG_PREHEAT_2, lcd_preheat_m2_menu);
       #else
         MENU_ITEM(function, MSG_PREHEAT_1, lcd_preheat_m1_e0_only);
         MENU_ITEM(function, MSG_PREHEAT_2, lcd_preheat_m2_e0_only);
@@ -3245,9 +3249,6 @@ void lcd_quick_feedback(const bool clear_buttons) {
     START_MENU();
     MENU_BACK(MSG_PREPARE);
 
-    #if HAS_SOFTWARE_ENDSTOPS && ENABLED(SOFT_ENDSTOPS_MENU_ITEM)
-      MENU_ITEM_EDIT(bool, MSG_LCD_SOFT_ENDSTOPS, &soft_endstops_enabled);
-    #endif
 
     if (_MOVE_XYZ_ALLOWED) {
       if (_MOVE_XY_ALLOWED) {
@@ -3872,6 +3873,9 @@ void lcd_quick_feedback(const bool clear_buttons) {
     #if ENABLED(ABORT_ON_ENDSTOP_HIT_FEATURE_ENABLED)
       MENU_ITEM_EDIT(bool, MSG_ENDSTOP_ABORT, &planner.abort_on_endstop_hit);
     #endif
+    //小树固件 新增设置菜单选项
+	  MENU_ITEM(function, MSG_STORE_EEPROM, lcd_store_settings);
+	  MENU_ITEM(function, MSG_LOAD_EEPROM, lcd_load_settings);
 
     END_MENU();
   }
@@ -4991,13 +4995,13 @@ void lcd_quick_feedback(const bool clear_buttons) {
   void menu_action_submenu(screenFunc_t func) { lcd_save_previous_screen(); lcd_goto_screen(func); }
   void menu_action_gcode(const char* pgcode) { enqueue_and_echo_commands_P(pgcode); }
   void menu_action_function(screenFunc_t func) { (*func)(); }
-
   #if ENABLED(SDSUPPORT)
 
     void menu_action_sdfile(CardReader& theCard) {
       #if ENABLED(SD_REPRINT_LAST_SELECTED_FILE)
         last_sdfile_encoderPosition = encoderPosition;  // Save which file was selected for later use
       #endif
+	  
       card.openAndPrintFile(theCard.filename);
       lcd_return_to_status();
       lcd_reset_status();
@@ -5666,6 +5670,7 @@ void lcd_reset_alert_level() { lcd_status_message_level = 0; }
     } // next_button_update_ms
 
     // Manage encoder rotation
+    /* 小树定制固件修改 旋钮方向可调  - 注释掉原本的宏
     #if ENABLED(REVERSE_MENU_DIRECTION) && ENABLED(REVERSE_ENCODER_DIRECTION)
       #define ENCODER_DIFF_CW  (encoderDiff -= encoderDirection)
       #define ENCODER_DIFF_CCW (encoderDiff += encoderDirection)
@@ -5673,12 +5678,17 @@ void lcd_reset_alert_level() { lcd_status_message_level = 0; }
       #define ENCODER_DIFF_CW  (encoderDiff += encoderDirection)
       #define ENCODER_DIFF_CCW (encoderDiff -= encoderDirection)
     #elif ENABLED(REVERSE_ENCODER_DIRECTION)
-      #define ENCODER_DIFF_CW  (encoderDiff--)
-      #define ENCODER_DIFF_CCW (encoderDiff++)
+      //#define ENCODER_DIFF_CW  (encoderDiff--)
+      //#define ENCODER_DIFF_CCW (encoderDiff++)
     #else
       #define ENCODER_DIFF_CW  (encoderDiff++)
       #define ENCODER_DIFF_CCW (encoderDiff--)
     #endif
+    */
+    //小树定制固件修改 旋钮方向可调
+    #define ENCODER_DIFF_CW  if(planner.encoder_dir){(encoderDiff++);}else{(encoderDiff--);}
+    #define ENCODER_DIFF_CCW if(planner.encoder_dir){(encoderDiff--);}else{(encoderDiff++);}
+
     #define ENCODER_SPIN(_E1, _E2) switch (lastEncoderBits) { case _E1: ENCODER_DIFF_CW; break; case _E2: ENCODER_DIFF_CCW; }
 
     uint8_t enc = 0;
@@ -5765,4 +5775,63 @@ void lcd_reset_alert_level() { lcd_status_message_level = 0; }
   }
 #endif
 
+  
+  //添加设置菜单
+  //电机方向
+	extern void update_invert_dir();
+	void _lcd_settings_invert_dir() {
+      START_MENU();
+      MENU_BACK(MSG_SETTING_MENU);
+	  MENU_ITEM_EDIT_CALLBACK(bool, MSG_X_INVERT_DIR, &planner.invert_dir[X_AXIS], update_invert_dir);
+	  MENU_ITEM_EDIT_CALLBACK(bool, MSG_Y_INVERT_DIR, &planner.invert_dir[Y_AXIS], update_invert_dir);
+	  MENU_ITEM_EDIT_CALLBACK(bool, MSG_Z_INVERT_DIR, &planner.invert_dir[Z_AXIS], update_invert_dir);
+	  MENU_ITEM_EDIT_CALLBACK(bool, MSG_E_INVERT_DIR, &planner.invert_dir[E_AXIS], update_invert_dir);
+      //MENU_ITEM(function, "X Direction", lcd_settings_gcode_1);
+      END_MENU();
+    }
+	
+  //屏幕旋钮方向
+  //静音驱动电流控制
+  
+  //归原点xy坐标
+	extern void update_homing_des();
+	void _lcd_settings_homing_des() {
+      START_MENU();
+      MENU_BACK(MSG_SETTING_MENU);
+	  MENU_ITEM_EDIT_CALLBACK(float3, MSG_HOMING_DES_X, &planner.homing_des[X_AXIS], 0, X_BED_SIZE, update_homing_des);
+	  MENU_ITEM_EDIT_CALLBACK(float3, MSG_HOMING_DES_Y, &planner.homing_des[Y_AXIS], 0, Y_BED_SIZE, update_homing_des);
+	  //MENU_ITEM_EDIT_CALLBACK(bool, MSG_Z_INVERT_DIR, &planner.invert_dir[Z_AXIS], update_invert_dir);
+	  //MENU_ITEM_EDIT_CALLBACK(bool, MSG_E_INVERT_DIR, &planner.invert_dir[E_AXIS], update_invert_dir);
+      END_MENU();
+    }
+  
+  //新增的设置菜单主目录
+    static void lcd_init_eeprom2() {
+      lcd_completion_feedback(settings.init_eeprom());
+      lcd_goto_previous_menu();
+    }
+	extern void update_encoder_dir();
+	void _lcd_settings_menu() {
+      START_MENU();
+      MENU_BACK(MSG_MAIN);
+	  //电机方向
+      MENU_ITEM(submenu, MSG_INVERT_DIR, _lcd_settings_invert_dir);
+    //旋钮方向
+	  MENU_ITEM_EDIT_CALLBACK(bool, MSG_ENCODER_DIR, &planner.encoder_dir, update_encoder_dir);
+	  //调整归原点xy坐标
+      MENU_ITEM(submenu, MSG_HOMING_DES, _lcd_settings_homing_des);
+	  //调整轴步进,移出设置菜单
+	  //MENU_ITEM(submenu, MSG_STEPS_SETTING, lcd_control_motion_steps_per_mm_menu);
+    //冷挤出保护，默认开启，不保存
+		MENU_ITEM_EDIT(bool, MSG_ALLOW_COLD_EXTRUDE, &thermalManager.allow_cold_extrude);
+	  //软限位
+	  #if HAS_SOFTWARE_ENDSTOPS && ENABLED(SOFT_ENDSTOPS_MENU_ITEM)
+		MENU_ITEM_EDIT(bool, MSG_LCD_SOFT_ENDSTOPS, &soft_endstops_enabled);
+      #endif
+	  MENU_ITEM(function, MSG_STORE_EEPROM, lcd_store_settings);
+	  MENU_ITEM(function, MSG_LOAD_EEPROM, lcd_load_settings);
+	  MENU_ITEM(function, MSG_INIT_EEPROM, lcd_init_eeprom2);
+      END_MENU();
+    }
+	
 #endif // ULTRA_LCD

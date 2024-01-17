@@ -324,7 +324,7 @@ extern float soft_endstop_min[XYZ], soft_endstop_max[XYZ];
   extern bool soft_endstops_enabled;
   void clamp_to_software_endstops(float target[XYZ]);
 #else
-  #define soft_endstops_enabled false
+  #define soft_endstops_enabled false //软限位
   #define clamp_to_software_endstops(x) NOOP
 #endif
 

@@ -376,7 +376,7 @@
 
 bool Running = true;
 
-uint8_t marlin_debug_flags = DEBUG_NONE;
+uint8_t marlin_debug_flags = false;
 
 /**
  * Cartesian Current Position
@@ -745,6 +745,11 @@ XYZ_CONSTS_FROM_CONFIG(float, base_home_pos,  HOME_POS);
 XYZ_CONSTS_FROM_CONFIG(float, max_length,     MAX_LENGTH);
 XYZ_CONSTS_FROM_CONFIG(float, home_bump_mm,   HOME_BUMP_MM);
 XYZ_CONSTS_FROM_CONFIG(signed char, home_dir, HOME_DIR);
+
+//小树定制固件
+//冷却挤出保护初始化
+//planner.cold_protect = true;
+
 
 /**
  * ***************************************************************************
@@ -4337,14 +4342,18 @@ inline void gcode_G4() {
     /**
      * Move the Z probe (or just the nozzle) to the safe homing point
      */
-    destination[X_AXIS] = Z_SAFE_HOMING_X_POINT;
-    destination[Y_AXIS] = Z_SAFE_HOMING_Y_POINT;
+    //destination[X_AXIS] = Z_SAFE_HOMING_X_POINT;
+    //destination[Y_AXIS] = Z_SAFE_HOMING_Y_POINT;
+	//小树定制固件修改归原点xy
+    destination[X_AXIS] = planner.homing_des[X_AXIS];
+    destination[Y_AXIS] = planner.homing_des[Y_AXIS];
     destination[Z_AXIS] = current_position[Z_AXIS]; // Z is already at the right height
-
-    #if HOMING_Z_WITH_PROBE
-      destination[X_AXIS] -= X_PROBE_OFFSET_FROM_EXTRUDER;
-      destination[Y_AXIS] -= Y_PROBE_OFFSET_FROM_EXTRUDER;
-    #endif
+	
+	//注释掉下面部分为原版自动调平感应器的偏移值
+    //#if HOMING_Z_WITH_PROBE
+    //  destination[X_AXIS] -= X_PROBE_OFFSET_FROM_EXTRUDER;
+    //  destination[Y_AXIS] -= Y_PROBE_OFFSET_FROM_EXTRUDER;
+    //#endif
 
     if (position_is_reachable(destination[X_AXIS], destination[Y_AXIS])) {
 
@@ -4360,7 +4369,6 @@ inline void gcode_G4() {
       #if ENABLED(SENSORLESS_HOMING)
         safe_delay(500); // Short delay needed to settle
       #endif
-
       do_blocking_move_to_xy(destination[X_AXIS], destination[Y_AXIS]);
       homeaxis(Z_AXIS);
     }
@@ -8616,9 +8624,12 @@ inline void gcode_M109() {
       const bool heating = thermalManager.isHeatingHotend(target_extruder);
       if (heating || !no_wait_for_cooling)
         #if HOTENDS > 1
-          lcd_status_printf_P(0, heating ? PSTR("E%i " MSG_HEATING) : PSTR("E%i " MSG_COOLING), target_extruder + 1);
+          lcd_status_printf_P(0, heating ? PSTR("E%i" MSG_HEATING) : PSTR("E%i" MSG_COOLING), target_extruder + 1);
         #else
-          lcd_setstatusPGM(heating ? PSTR("E " MSG_HEATING) : PSTR("E " MSG_COOLING));
+          //打印文件，加热e时会显示文件名
+          //SERIAL_ECHOLNPAIR("Isprinting：", (int)card.sdprinting);
+          lcd_status_printf_P(0, heating ? PSTR("E" MSG_HEATING " %s") : PSTR("E" MSG_COOLING " %s"), card.sdprinting ? card.longest_filename() : "");
+		      //lcd_setstatusPGM(heating ? PSTR("E " MSG_HEATING) : PSTR("E " MSG_COOLING));
         #endif
     #endif
   }
@@ -8771,8 +8782,10 @@ inline void gcode_M109() {
     }
     else return;
 
-    lcd_setstatusPGM(thermalManager.isHeatingBed() ? PSTR(MSG_BED_HEATING) : PSTR(MSG_BED_COOLING));
-
+    //lcd_setstatusPGM(thermalManager.isHeatingBed() ? PSTR(MSG_BED_HEATING) : PSTR(MSG_BED_COOLING));
+    //小树固件 加热热床时会显示打印的文件名
+    lcd_status_printf_P(0, thermalManager.isHeatingBed() ? PSTR(MSG_BED_HEATING " %s") : PSTR(MSG_BED_COOLING " %s"), card.sdprinting ? card.longest_filename() : "");
+    
     #if TEMP_BED_RESIDENCY_TIME > 0
       millis_t residency_start_ms = 0;
       // Loop until the temperature has stabilized
@@ -9527,11 +9540,11 @@ inline void gcode_M121() { endstops.enable_globally(false); }
       #endif
     );
 
-    point_t park_point = NOZZLE_PARK_POINT;
+    point_t park_point = NOZZLE_PARK_POINT; //暂停限制 x y的移动
 
     // Move XY axes to filament change position or given position
-    if (parser.seenval('X')) park_point.x = parser.linearval('X');
-    if (parser.seenval('Y')) park_point.y = parser.linearval('Y');
+    if (parser.seenval('X')) park_point.x = parser.linearval('X'); //人工注释掉
+    if (parser.seenval('Y')) park_point.y = parser.linearval('Y'); //人工注释掉
 
     // Lift Z axis
     if (parser.seenval('Z')) park_point.z = parser.linearval('Z');
@@ -11051,6 +11064,26 @@ inline void gcode_M502() {
 
 #endif // HAS_BED_PROBE
 
+//新增设置菜单
+//更新电机方向
+  void update_invert_dir(){
+	  stepper.reset_directions();
+	  //更改方向后自动保存设置
+	  (void)settings.save();
+  }
+  
+  //
+  //屏幕旋钮方向
+  void update_encoder_dir(){
+	  //更改方向后自动保存设置
+	  (void)settings.save();
+  }
+  //静音驱动电流控制
+  
+//更新归原点后自动保存
+  void update_homing_des(){
+	  (void)settings.save();
+  }
 #if ENABLED(SKEW_CORRECTION_GCODE)
 
   /**
@@ -12820,6 +12853,25 @@ inline void gcode_T(const uint8_t tmp_extruder) {
     }
   #endif
 }
+//小树定制固件 X扩展命令
+//定义消息模板
+#define MSG_X1TEMP "{\"test\":\"test\"}"
+
+inline void gcode_X1(){
+  char* result;
+  if (get_target_extruder_from_command(105)) return;
+
+  #if HAS_TEMP_SENSOR
+    SERIAL_PROTOCOLPGM(MSG_OK);
+    thermalManager.print_heaterstates();
+  #else // !HAS_TEMP_SENSOR
+    SERIAL_ERROR_START();
+    SERIAL_ERRORLNPGM(MSG_ERR_NO_THERMISTORS);
+  #endif
+
+  SERIAL_EOL();
+}
+
 
 /**
  * Process the parsed command and dispatch it to its handler
@@ -12879,7 +12931,7 @@ void process_parsed_command() {
         case 27: gcode_G27(); break;                              // G27: Park Nozzle
       #endif
 
-      case 28: gcode_G28(false); break;                           // G28: Home one or more axes
+      case 28: gcode_G28(false); set_bed_leveling_enabled(true);break;                           // G28: Home one or more axes//MKS自动调平
 
       #if HAS_LEVELING
         case 29: gcode_G29(); break;                              // G29: Detailed Z probe
@@ -13235,7 +13287,7 @@ void process_parsed_command() {
       #if ENABLED(DEBUG_GCODE_PARSER)
         case 800: parser.debug(); break;                          // M800: GCode Parser Test for M
       #endif
-
+	  
       #if HAS_BED_PROBE
         case 851: gcode_M851(); break;                            // M851: Set Z Probe Z Offset
       #endif
@@ -13292,6 +13344,11 @@ void process_parsed_command() {
       case 999: gcode_M999(); break;                              // M999: Restart after being Stopped
 
       default: parser.unknown_command_error();
+    }
+    break;
+    //小树定制固件 扩展命令，主要用于和wifi模块的通讯
+    case 'X': switch (parser.codenum) {
+      case 1: gcode_X1(); break;                                  // X1: 获取打印机基础状态。（json格式，温度，位置）
     }
     break;
 
@@ -14413,7 +14470,8 @@ void prepare_move_to_destination() {
     if (!DEBUGGING(DRYRUN)) {
       if (destination[E_CART] != current_position[E_CART]) {
         #if ENABLED(PREVENT_COLD_EXTRUSION)
-          if (thermalManager.tooColdToExtrude(active_extruder)) {
+        
+        if (thermalManager.tooColdToExtrude(active_extruder)) {
             current_position[E_CART] = destination[E_CART]; // Behave as if the move really took place, but ignore E part
             SERIAL_ECHO_START();
             SERIAL_ECHOLNPGM(MSG_ERR_COLD_EXTRUDE_STOP);
