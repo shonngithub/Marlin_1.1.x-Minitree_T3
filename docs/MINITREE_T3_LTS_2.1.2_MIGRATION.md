@@ -1,85 +1,183 @@
-# MiniTree T3 Migration To Marlin lts-2.1.2
+# MiniTree T3 迁移到 Marlin lts-2.1.2 的逐项审计
 
-Status values:
+## 1. 审计结论
 
-- `DONE`: implemented and statically verified.
-- `BUILD`: implemented but requires a successful firmware build.
-- `HARDWARE`: requires testing on the physical printer.
-- `HOLD`: intentionally not ported pending evidence.
+当前分支已经完成 MiniTree T3 核心打印功能向 Marlin `lts-2.1.2` 的配置迁移，
+但不能表述为“旧版所有源码修改都已原样移植”。
 
-## Current Verification
+核对结果分为五类：
 
-The migrated configuration compiled successfully on July 16, 2026:
+- **已移植**：旧功能在新版中保留，并使用对应配置或代码实现。
+- **原生替代**：不复制旧模块，改用 Marlin 2.1.2 的标准实现。
+- **安全修正**：旧行为存在安全问题或配置错误，新版有意采用不同实现。
+- **无需移植**：旧改动不产生运行行为，或旧配置中实际未启用。
+- **未移植**：协议不明、风险过高或仍需确认是否真的需要。
+
+因此，核心运动、温控、调平、断料、M600、SD、掉电恢复、中文屏和 EEPROM
+能力已经进入新分支；`X1`、运行时电机方向、私有 EEPROM、加热时附加文件名等
+源码扩展没有全部复制。所有差异都在本文中明确登记。
+
+## 2. 当前基线与验证
+
+- 迁移分支：`codex/minitree-t3-lts-2.1.2-migration`
+- 上游目标提交：`78d76552e5de49cbb4a9364d05f14e5f693e9000`
+- 旧版对照提交：`c2181f137147d1974596647e161a3d4b6395bbe2`
+- 固件标识：`2.1.2.8-MiniTree-T3`
+- 构建环境：PlatformIO `mega2560`
+
+最近一次完整构建结果：
 
 ```text
 python -m platformio run -e mega2560
 RAM:   65.6% (5374 / 8192 bytes)
-Flash: 67.8% (172194 / 253952 bytes)
+Flash: 67.7% (172046 / 253952 bytes)
 ```
 
-This is a compile and static-configuration result, not a claim that the
-printer is safe to operate without the hardware checks below.
+编译通过只证明宏组合、源码和 ATmega2560 容量检查通过，不代表限位、方向、
+探针、热敏电阻、加热器、断料开关和掉电恢复已经通过实机验收。
 
-## Migration Matrix
+构建后的 `firmware.elf` 已确认包含以下 `M115` 关键信息：
 
-| ID | Customization | Marlin 2.1.2 approach | Status |
+```text
+FIRMWARE_NAME:Marlin 2.1.2.8-MiniTree-T3
+SOURCE_CODE_URL:github.com/shonngithub/Marlin_1.1.x-Minitree_T3
+MACHINE_TYPE:MiniTree T3
+```
+
+## 3. 核心功能逐项核对
+
+| ID | 旧版功能 | Marlin 2.1.2 处理 | 状态 |
 | --- | --- | --- | --- |
-| CFG-01 | RAMPS 1.4 EFB / Mega2560 | `BOARD_RAMPS_14_EFB`, PlatformIO `mega2560` | BUILD |
-| CFG-02 | 125 x 125 x 160 volume | Set bed and Z limits | BUILD |
-| CFG-03 | Steps, rates, acceleration, direction | Port configuration values; enable classic jerk | BUILD |
-| CFG-04 | X/Y/Z MIN endstop polarity | Port and verify with `M119` before homing | HARDWARE |
-| CFG-05 | Fixed Z probe, X+26/Y+20 | `FIX_MOUNTED_PROBE`, `NOZZLE_TO_PROBE_OFFSET` | HARDWARE |
-| CFG-06 | Linear auto bed leveling | `AUTO_BED_LEVELING_LINEAR`, 3 x 3 grid | HARDWARE |
-| CFG-07 | Leveling enabled after G28 | Native `ENABLE_LEVELING_AFTER_G28`; no source patch | HARDWARE |
-| CFG-08 | Runout sensor on D19 | Pin override plus `FILAMENT_RUNOUT_SENSOR` | HARDWARE |
-| CFG-09 | M600 / advanced pause | Port current unload/load/purge values | HARDWARE |
-| CFG-10 | SD and power-loss recovery | LCD SD connection, `POWER_LOSS_RECOVERY` | HARDWARE |
-| CFG-11 | Full Graphic ST7920 LCD | Native controller option; preserve conservative delays | HARDWARE |
-| CFG-12 | Simplified Chinese UI | Native `LCD_LANGUAGE zh_CN` and Marlin 2 font pages | BUILD |
-| CFG-13 | PID and temperature limits | Port values, then retune PID on hardware | HARDWARE |
-| CFG-14 | EEPROM settings | Native Marlin settings; reset old EEPROM layout | HARDWARE |
-| UI-01 | Runtime motor direction menu | Do not port; use compile-time direction | HOLD |
-| UI-02 | Runtime encoder direction | Use compile-time `REVERSE_ENCODER_DIRECTION` | DONE |
-| UI-03 | Editable Z-home XY point | Use fixed safe-homing point initially | HOLD |
-| UI-04 | Cold extrusion toggle | Keep native safety behavior and M302 support | DONE |
-| UI-05 | Chinese custom menu wording | Use upstream translations first | BUILD |
-| SRC-01 | X1 Wi-Fi status command | Requires Wi-Fi protocol/client capture | HOLD |
-| SRC-02 | Filename during M109/M190 | Optional UI enhancement after core migration | HOLD |
-| SRC-03 | Negative bed reading clamp | Do not port | DONE |
-| SRC-04 | Custom EEPROM `M01` layout | Do not port; incompatible with 2.1.2 | DONE |
-| BRAND-01 | MiniTree T3 identity | Consistent author/name/website strings | BUILD |
+| HW-01 | RAMPS 1.4 EFB / Mega2560 | `BOARD_RAMPS_14_EFB`、`mega2560` | 已移植，编译通过 |
+| HW-02 | 串口 0、250000 | 保留原值 | 已移植 |
+| HW-03 | 单 E0、1.75 mm | 保留并显式使用 A4988 类驱动配置 | 已移植，驱动型号待实机确认 |
+| HW-04 | 125 × 125 × 160 mm | 设置床尺寸和 Z 行程 | 已移植 |
+| MOT-01 | 步数、速度、加速度 | 按旧配置迁移 | 已移植，待低速点动 |
+| MOT-02 | 经典 Jerk | 启用 `CLASSIC_JERK` 并迁移数值 | 已移植 |
+| MOT-03 | XYZ/E0 编译期方向 | 使用新版 `INVERT_*_DIR` | 已移植，待实机确认 |
+| MOT-04 | LCD 运行时修改电机方向 | 不保留危险的即时反转和私有 EEPROM | 安全修正，未移植 |
+| END-01 | X/Y/Z MIN 限位极性 | 迁移为反相 `true` | 已移植，必须先执行 `M119` |
+| END-02 | 关闭 Z 最小和全部最大软件限位 | 新版暂保留标准软件限位 | 安全修正，存在行为差异 |
+| PRB-01 | 固定探针，共用 Z-MIN | 原生固定探针配置 | 已移植，待 `M119` |
+| PRB-02 | 探针 X+26/Y+20/Z0 | 使用 `NOZZLE_TO_PROBE_OFFSET` | X/Y 已移植，Z 必须重标 |
+| ABL-01 | 线性 3 × 3 调平 | `AUTO_BED_LEVELING_LINEAR` | 已移植，待 G29 |
+| ABL-02 | G28 后强制启用调平 | 原生 `ENABLE_LEVELING_AFTER_G28` | 原生替代，待实机确认 |
+| HOME-01 | EEPROM 可编辑 Z 归零 XY | 旧配置实际未启用 `Z_SAFE_HOMING` | 无需复制旧实现 |
+| HOME-02 | 安全 Z 归零 | 使用标准床中心 `Z_SAFE_HOMING` | 安全增强，存在行为差异 |
+| TMP-01 | 热端/热床传感器类型 1 | 保留 | 已移植 |
+| TMP-02 | 热端/热床 PID | 保留旧值 | 已移植，建议重新整定 |
+| TMP-03 | 热端输出上限 200 | `PID_MAX 200` | 已移植 |
+| TMP-04 | MAXTEMP 265/120°C | 保留 | 已移植 |
+| TMP-05 | MINTEMP -20°C | 使用新版安全默认 5°C | 安全修正，不等价 |
+| TMP-06 | 开机默认允许冷挤出 | 恢复 `PREVENT_COLD_EXTRUSION` | 安全修正，不移植 |
+| TMP-07 | 负热床温度显示为 0 | 保留真实读数和故障 | 安全修正，不移植 |
+| TMP-08 | M109/M190 等待窗口 | 保留旧值 | 已移植 |
+| TMP-09 | 热失控周期和迟滞 | 保留旧值 | 已移植，需拔插与失温测试 |
+| RUN-01 | D19 单路断料传感器 | 配置层 `FIL_RUNOUT_PIN 19` | 已移植，待开关实测 |
+| RUN-02 | 断料执行 M600 | 原生 `FILAMENT_RUNOUT_SCRIPT` | 已移植 |
+| M600-01 | 装料、卸料、清料、停靠参数 | 映射到新版 Advanced Pause 参数 | 已移植，待完整流程测试 |
+| M600-02 | `PAUSE_PARK_NO_STEPPER_TIMEOUT 500` | 按布尔开关正确启用 | 配置错误修正 |
+| SD-01 | LCD SD | `SDSUPPORT`、LCD 连接 | 已移植 |
+| SD-02 | 打印结束释放电机 | 新版 `"M84"` | 原生等价替代 |
+| PLR-01 | 掉电恢复默认开启 | `POWER_LOSS_RECOVERY`、默认 `true` | 已移植，待真实断电测试 |
+| LCD-01 | 12864 ST7920 | 原生 Full Graphic Controller | 已移植 |
+| LCD-02 | ST7920 125/125/125 ns | 配置层 `BOARD_ST7920_DELAY_*` | 已移植，待屏幕稳定性测试 |
+| LCD-03 | 旋钮方向反转 | `REVERSE_ENCODER_DIRECTION` | 原生替代 |
+| LCD-04 | 自定义启动位图 | 旧配置从未启用；新版关闭启动画面 | 无需移植 |
+| LANG-01 | 简体中文菜单 | 原生 `LCD_LANGUAGE zh_CN` | 原生替代，待遍历菜单 |
+| LANG-02 | 自制中文字体和 UTF mapper | 使用新版原生字库和 UTF-8 框架 | 原生替代 |
+| EEPROM-01 | M500/M501/M503 | 新版原生 EEPROM 设置 | 已移植 |
+| EEPROM-02 | 私有 `M01` 布局 | 不读取旧二进制，启用自动初始化 | 不兼容，按升级流程处理 |
+| BRAND-01 | MiniTree T3 身份 | `_Version.h` 统一 M115 和版本信息 | 已移植 |
 
-## Required Hardware Validation
+## 4. 旧版引入模块核对
 
-Perform these checks in order. Keep heaters disconnected for the first motion
-checks where practical.
+| 旧版引入或扩展模块 | 是否迁移 | 处理结论 |
+| --- | --- | --- |
+| 自制中文字体数据 | 否，原生替代 | 新版 `zh_CN` 字库覆盖基础中文 UI，避免旧映射缺陷 |
+| 自制 UTF-8/汉字索引映射 | 否，原生替代 | 旧实现对两字节字符和部分 ASCII 处理有缺陷 |
+| LCD 私有设置菜单 | 部分 | EEPROM、冷挤出命令、软限位等由原生命令/菜单承担；危险项不复制 |
+| 运行时 XYZ/E 电机方向 | 否 | 打印中即时反向风险高，改用编译期配置 |
+| 运行时旋钮方向 | 否，原生替代 | 由 `REVERSE_ENCODER_DIRECTION` 固定 |
+| EEPROM 可编辑 Z 归零 XY | 否，原生替代 | 旧配置中实际无效，新版使用床中心安全归零 |
+| 私有 EEPROM `M01` | 否 | 与 2.1.2 设置结构二进制不兼容 |
+| `X1` Wi-Fi 命令 | 否，待协议 | 没有客户端样本，旧输出也不是注释所称 JSON |
+| M109/M190 显示当前 SD 文件名 | 否，待需求 | 不影响打印核心，需按新版状态栏 API 单独实现 |
+| 隐藏 ABS 预热 | 未严格保持 | 新版原生预热菜单结构不同，需确认是否仍要求只显示 PLA |
+| 喷嘴单独预热 | 是，原生替代 | 新版温度菜单已提供按加热器操作 |
+| 设置原点偏移后自动 M500/M501 | 否 | 使用标准“显式保存设置”语义，避免无提示写 EEPROM |
+| G28 后恢复调平源码补丁 | 否，原生替代 | 使用 `ENABLE_LEVELING_AFTER_G28` |
+| 自定义启动位图 | 否，无需 | 旧发布配置没有启用 |
+| ST7920 慢时序 | 是 | 已等价设置为 125/125/125 ns |
 
-1. Run `M115` and confirm the expected build identity.
-2. Run `M119`; manually trigger X, Y, Z, probe, and filament switches.
-3. Jog each axis 1 mm in the positive direction. Power off immediately if any
-   axis moves incorrectly.
-4. Home X and Y individually, then Z with the probe.
-5. Confirm physical travel limits and decide whether maximum software
-   endstops can be safely enabled.
-6. Set and save the real probe Z offset with `M851` and `M500`.
-7. Run hotend and bed PID autotune; compare results with the legacy values.
-8. Test thermal runaway and sensor-disconnect behavior.
-9. Test `G29`, save leveling data if applicable, and verify post-G28 leveling.
-10. Test runout-triggered `M600`, park location, load/unload, timeout, and resume.
-11. Test SD printing, long Chinese filenames, and LCD encoder direction.
-12. Test power interruption and recovery using a disposable print.
+## 5. 已知兼容问题和行为变化
 
-## EEPROM Upgrade Procedure
+### 5.1 刷机前必须处理
 
-Before flashing, record legacy values with `M503`, especially:
+1. **旧 EEPROM 不兼容。** 旧 `M01` 与新版布局不同，必须先记录旧 `M503`
+   数据，刷机后执行 `M502`、`M500`。
+2. **探针 Z 偏移当前为 0。** X/Y 偏移可以迁移，真实 Z 偏移必须重新标定，
+   未标定前不能直接开始打印。
+3. **限位和探针极性只能通过实机确认。** 首次回零前必须使用 `M119`，分别
+   按下 X、Y、Z、探针和断料开关检查状态。
+4. **电机方向尚未经过实机确认。** 首次只允许每轴 1 mm 低速点动，并准备
+   立即断电。
 
-- Steps/mm.
-- PID values.
-- Probe Z offset.
-- Home offsets.
-- Any manually tuned acceleration or feedrate values.
+### 5.2 有意保留的安全差异
 
-After flashing Marlin 2.1.2:
+| 项目 | 旧版 | 新版 | 影响 |
+| --- | --- | --- | --- |
+| 冷挤出 | 开机默认允许 | 默认禁止，阈值 185°C | 防止冷态强推耗材 |
+| 热端/热床 MINTEMP | -20°C | 5°C | 更容易识别断线，寒冷环境需实测 |
+| 负床温显示 | 强制为 0 | 显示真实值/触发故障 | 不再掩盖传感器异常 |
+| 最大软件限位 | 全关闭 | 保留标准限位 | 旧越界 G-code 可能被拒绝 |
+| Z 最小软件限位 | 关闭 | 保留 | 负 Z 操作方式发生变化 |
+| Z 安全归零 | 旧配置未启用 | 启用，床中心 | 回零路径和位置发生变化 |
+| M600 步进保持 | 旧宏写法实际无效 | 正确启用 | 暂停期间 XYZ 持续上电 |
+
+### 5.3 仍需实机确认
+
+- ST7920 在 125/125/125 ns 时是否无花屏、漏字和随机复位。
+- D19 断料电平是否与 `FIL_RUNOUT_STATE LOW` 一致。
+- Z-MIN 共用探针时，`M119` 的触发逻辑是否正确。
+- 床中心是否在探针可达范围内，避免 Z 安全归零越界。
+- 旧 PID 参数是否仍适合当前热端、热床、MOSFET 和电源。
+- 热端 60 秒、热床 90 秒热失控周期是否过于宽松。
+- 新版 `WATCH_TEMP_PERIOD 40` 与旧设备升温速度是否匹配。
+- 中文菜单、特殊符号、长中英文 SD 文件名是否正常显示。
+- 无专用掉电检测脚时，SD 写入频率、恢复文件和恢复顺序是否可靠。
+
+## 6. 实机验收顺序
+
+建议按以下顺序执行，不要跳过前面的低风险检查：
+
+1. 刷机前保存旧固件的 `M503` 输出。
+2. 刷入后执行 `M502`、`M500`、`M503`，确认新版默认值。
+3. 执行 `M115`，确认版本为 `2.1.2.8-MiniTree-T3`。
+4. 执行 `M119`，手动触发所有限位、探针和断料开关。
+5. 在未回零状态下逐轴低速点动 1 mm，确认 XYZ/E 方向。
+6. 分别回零 X、Y，最后在手压探针验证后回零 Z。
+7. 测量真实行程，确认是否需要调整新版软件限位策略。
+8. 使用 `M851` 标定探针 Z 偏移并 `M500` 保存。
+9. 执行 G28、G29，确认 G28 后调平状态和 3 × 3 网格。
+10. 对热端、热床执行 PID 自动整定，并测试传感器拔插和热失控保护。
+11. 手动执行 M600，再测试断料触发、停靠、装卸料、超时和恢复。
+12. 测试 SD 打印、中文菜单、文件名、旋钮方向和打印结束释放电机。
+13. 最后使用可丢弃的小模型测试真实断电和恢复。
+
+## 7. EEPROM 升级流程
+
+旧固件刷除前记录：
+
+- `M92` 步数/mm
+- `M203` 最大速度
+- `M201`、`M204` 加速度
+- 热端和热床 PID
+- `M851` 探针 Z 偏移
+- Home Offset
+- 其他现场调校值
+
+刷入新版后执行：
 
 ```text
 M502
@@ -87,15 +185,17 @@ M500
 M503
 ```
 
-Then restore only confirmed calibration values with current Marlin commands.
-Do not attempt to reuse or decode the legacy `M01` EEPROM structure in place.
+只恢复已确认仍适用于新结构的校准值。不要恢复旧 EEPROM 镜像，也不要按旧
+`M01` 字节偏移直接写入新版 EEPROM。
 
-## Deferred Compatibility Questions
+## 8. 尚未关闭的维护项
 
-- What hardware or software consumes the old `X1` command?
-- Is runtime motor-direction editing actually used in the field?
-- What is the calibrated probe Z offset currently stored in the printer?
-- Does the bed thermistor legitimately report below 0 C, or was the old clamp
-  masking a wiring fault?
-- Is power-loss recovery dependable with the current SD card and power supply?
-- Should maximum software endstops remain disabled after travel measurement?
+- 获取使用 `X1` 的 Wi-Fi 模块型号、请求格式和返回协议样本。
+- 确认是否必须恢复“加热时显示当前 SD 文件名”。
+- 确认是否仍需要隐藏 ABS 预热档位。
+- 确认现场是否真的依赖运行时修改电机方向；默认结论是不恢复。
+- 获取当前机器保存的真实探针 Z 偏移。
+- 完成全部实机验收后，把本文中的“待实机”状态更新为具体结果。
+
+在这些项目完成前，可以确认“迁移分支编译通过且核心配置已映射”，但不能确认
+“所有旧定制功能均已实机无问题”。

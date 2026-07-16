@@ -1,162 +1,219 @@
-# MiniTree T3 Customization Inventory
+# MiniTree T3 旧版定制点清单
 
-This document records the intentional behavior in the legacy `1.1.x` fork so
-future Marlin upgrades can be checked against a stable list.
+本文档记录旧 `1.1.x` 分支相对上游 Marlin 的全部有效定制，用作后续升级、
+排障和实机验收的固定对照基线。
 
-## Source Baselines
+## 1. 对照基线
 
-- Fork branch: `shonngithub/Marlin_1.1.x-Minitree_T3` `1.1.x`
-- Fork tip: `c2181f137147d1974596647e161a3d4b6395bbe2`
-- Main customization commit: `ba54e2d` (`minitree-T3`)
-- Shared upstream base: `dd00f8b1a8448ff66ffe16d5ee04e5205c734145`
-  (Marlin 1.1.9.2)
-- Migration target: `MarlinFirmware/Marlin` `lts-2.1.2`
-- Target tip used for this migration:
+- 旧定制分支：`shonngithub/Marlin_1.1.x-Minitree_T3` 的 `1.1.x`
+- 旧分支末端：`c2181f137147d1974596647e161a3d4b6395bbe2`
+- 主要定制提交：`ba54e2d`（`minitree-T3`）
+- 与上游的共同基线：`dd00f8b1a8448ff66ffe16d5ee04e5205c734145`
+  （Marlin 1.1.9.2）
+- 迁移目标：`MarlinFirmware/Marlin` 的 `lts-2.1.2`
+- 本次使用的上游目标提交：
   `78d76552e5de49cbb4a9364d05f14e5f693e9000`
 
-The fork also deletes most `Marlin/example_configurations` files. Those
-deletions are repository-size cleanup, not printer behavior, and must not be
-ported.
+旧分支还批量删除了 `Marlin/example_configurations`。这些删除只是仓库瘦身，
+不影响 MiniTree T3 的运行功能，因此不属于迁移对象。
 
-## Hardware Profile
+## 2. 总体结论
 
-| Area | Legacy value / behavior | Migration requirement |
+旧分支不是单纯修改 `Configuration.h`，而是包含以下几类定制：
+
+1. MiniTree T3 硬件、运动、温控、探针、断料、SD 和 LCD 配置。
+2. 自制中文字体、UTF-8 映射和中文菜单文本。
+3. LCD 运行时修改电机方向、旋钮方向和归零坐标的私有设置菜单。
+4. 私有 EEPROM `M01` 数据结构。
+5. `X1` Wi-Fi 状态命令、加热时显示 SD 文件名等源码功能。
+6. 自定义版本标识和未启用的启动位图。
+
+迁移原则不是逐行复制旧源码。能由 Marlin 2.1.2 原生功能实现的定制使用原生
+实现；有安全风险、旧版实际无效、协议不明或与新版结构不兼容的定制保留在
+清单中，但不直接移植。
+
+## 3. 硬件配置
+
+| 项目 | 旧版值或行为 | 迁移要求 |
 | --- | --- | --- |
-| MCU / board | ATmega2560, `BOARD_RAMPS_14_EFB` | Build with PlatformIO `mega2560` |
-| Serial | Port 0, 250000 baud | Preserve |
-| Extruder | One E0 extruder, 1.75 mm filament | Preserve |
-| Drivers | Legacy defaults imply A4988-compatible step/dir drivers | Confirm actual installed drivers before changing driver type |
-| Build volume | 125 x 125 x 160 mm | Preserve |
-| Endstops | X/Y/Z home to MIN; active/inverting state is `true` | Preserve and bench-test before motion |
-| Probe | Fixed probe on Z-MIN, offset X+26 Y+20 Z0 | Preserve X/Y; obtain actual Z offset from printer EEPROM or calibration |
-| Runout | One sensor on RAMPS D19 (repurposed Z-MAX) | Preserve with an explicit pin override |
-| Display | RepRapDiscount Full Graphic 12864 / ST7920 | Preserve |
-| Storage | LCD SD card enabled | Preserve |
+| MCU / 主板 | ATmega2560、`BOARD_RAMPS_14_EFB` | 使用 PlatformIO `mega2560` |
+| 串口 | 串口 0、250000 波特率 | 保留 |
+| 挤出机 | 单 E0、1.75 mm 耗材 | 保留 |
+| 驱动 | 未显式声明，按 A4988 类 Step/Dir 驱动处理 | 实机确认驱动型号 |
+| 成型尺寸 | 125 × 125 × 160 mm | 保留 |
+| 回零方向 | X/Y/Z 均向 MIN | 保留 |
+| 限位极性 | X/Y/Z MIN 均为反相 `true` | 刷机后先用 `M119` 验证 |
+| 探针 | 固定探针，共用 Z-MIN，X+26、Y+20、Z0 | X/Y 保留，Z 必须重新标定 |
+| 断料 | 单路传感器，RAMPS D19（原 Z-MAX） | 配置层显式覆盖引脚 |
+| 屏幕 | RepRapDiscount Full Graphic 12864 / ST7920 | 保留 |
+| SD | LCD SD 卡槽 | 保留 |
 
-## Motion Settings
+旧 `pins_RAMPS.h` 还清空了 Y-MAX/Z-MAX，并屏蔽 E1 驱动引脚。这些改动会降低
+通用 RAMPS 定义的可维护性，且当前机器并不使用这些资源，所以新版不复制整个
+引脚文件，只保留实际使用的 D19 断料引脚。
 
-- Steps/mm: `{ 80, 80, 400, 90 }`.
-- Max feedrate: `{ 300, 300, 5, 25 }` mm/s.
-- Max acceleration: `{ 1000, 1000, 50, 1000 }`.
-- Print acceleration: `1000`; retract and travel acceleration: `2000`.
-- Legacy classic jerk: X/Y `5`, Z `0.3`, E `5`.
-- Motor direction: X false, Y true, Z true, E0 true.
-- Minimum software endstops enabled for X/Y only.
-- Z minimum software endstop disabled.
-- All maximum software endstops disabled.
+## 4. 运动参数
 
-The legacy firmware adds an LCD menu that changes X/Y/Z/E motor direction at
-runtime and stores it in EEPROM. This bypasses Marlin's compile-time direction
-configuration and rewrites E0 handling for a single-extruder-only machine.
-This is high risk and is not a normal Marlin feature.
+- 步数/mm：`{ 80, 80, 400, 90 }`
+- 最大速度：`{ 300, 300, 5, 25 }` mm/s
+- 最大加速度：`{ 1000, 1000, 50, 1000 }`
+- 打印加速度：`1000`
+- 回抽和空移加速度：`2000`
+- 经典 Jerk：X/Y `5`、Z `0.3`、E `5`
+- 电机方向：X `false`、Y `true`、Z `true`、E0 `true`
+- 旧版仅启用 X/Y 最小软件限位，关闭 Z 最小软件限位和全部最大软件限位
 
-## Temperature Control
+旧版 LCD 可以在运行中修改 X/Y/Z/E 电机方向并写入 EEPROM。该实现没有在
+切换前同步规划器，打印中误操作可能立即反转电机；E 轴代码还硬编码为单 E0。
+新版只保留经过确认的编译期方向，不移植运行时方向修改。
 
-- Hotend and bed sensor type: `1`.
-- Hotend min/max: `-20` / `265` C.
-- Bed min/max: `-20` / `120` C.
-- Hotend PID: Kp `24.71`, Ki `1.61`, Kd `94.64`.
-- Bed PID: Kp `380.34`, Ki `66.65`, Kd `429.85`.
-- Hotend output limit (`BANG_MAX` / PID max): `200`.
-- Cold extrusion threshold: `185` C.
-- Maximum single extrusion: `500` mm.
-- Thermal runaway period/hysteresis: hotend `60 s / 5 C`, bed `90 s / 5 C`.
-- Temperature wait windows are intentionally short and broad.
+## 5. 温控参数与安全差异
 
-The legacy source initializes `allow_cold_extrude` to true and clamps negative
-bed readings to zero. Both changes weaken safety behavior and must not be
-ported automatically. Use standard Marlin protection unless hardware testing
-proves a documented need.
+- 热端和热床传感器类型：`1`
+- 旧版热端/热床 MINTEMP：`-20°C`
+- 热端/热床 MAXTEMP：`265°C` / `120°C`
+- 热端 PID：Kp `24.71`、Ki `1.61`、Kd `94.64`
+- 热床 PID：Kp `380.34`、Ki `66.65`、Kd `429.85`
+- 热端 PID 输出上限：`200`
+- 冷挤出阈值：`185°C`
+- 单次最大挤出长度：`500 mm`
+- 热失控周期/迟滞：热端 `60 s / 5°C`，热床 `90 s / 5°C`
+- M109 等待：`3 s`、窗口 `3°C`
+- M190 等待：`1 s`、窗口/迟滞 `5°C`
 
-## Bed Leveling And Homing
+旧源码把 `allow_cold_extrude` 的启动默认值改为允许，并把负热床温度显示强制
+归零。这两项会削弱冷挤出保护和热敏电阻断线诊断。新版有意恢复标准安全行为：
 
-- `FIX_MOUNTED_PROBE`.
-- `AUTO_BED_LEVELING_LINEAR`, legacy 3 x 3 grid.
-- Probe margin: 15 mm.
-- XY probing feedrate: 1000 mm/min.
-- Probe offset: `{ 26, 20, 0 }`.
-- Legacy code forces leveling on after every G28.
-- Legacy code adds EEPROM-backed X/Y coordinates for Z safe homing, defaulting
-  to X10/Y10, but `Z_SAFE_HOMING` is disabled in the shipped configuration.
+- 开机默认禁止低于 `185°C` 的挤出，必要时仍可显式使用 `M302`。
+- 保留真实负温度和 MINTEMP 故障，不掩盖传感器异常。
+- MINTEMP 保留新版安全默认 `5°C`，不恢复旧版 `-20°C`。
 
-For Marlin 2.1.2, use the native leveling options. Do not carry the old G28
-source patch. The desired behavior maps to `ENABLE_LEVELING_AFTER_G28` or
-`RESTORE_LEVELING_AFTER_G28`, subject to printer testing.
+## 6. 探针、调平与回零
 
-## Filament Change
+- `FIX_MOUNTED_PROBE`
+- `Z_MIN_PROBE_USES_Z_MIN_ENDSTOP_PIN`
+- `AUTO_BED_LEVELING_LINEAR`
+- 3 × 3 探测网格
+- 边缘距离：`15 mm`
+- XY 探测速度：`1000 mm/min`
+- 探针偏移：`{ 26, 20, 0 }`
+- 旧源码在每次 `G28` 后强制重新启用调平
 
-- Filament runout invokes `M600`.
-- Advanced Pause is enabled.
-- Unload length: 50 mm at 10 mm/s.
-- Slow load: 40 mm at 5 mm/s.
-- Fast load: 0 mm at 5 mm/s, acceleration 15 mm/s2.
-- Continuous purge enabled; automatic purge length 0.
-- Unload purge retract/delay/purge: 3 mm / 2000 ms / 0 mm.
-- Nozzle timeout: 300 seconds.
-- Nozzle park point: X10, Y105, Z20.
-- `PARK_HEAD_ON_PAUSE` is disabled.
+新版使用原生 `ENABLE_LEVELING_AFTER_G28`，不复制旧 `G28` 源码补丁。
 
-The old `PAUSE_PARK_NO_STEPPER_TIMEOUT 500` is an invalid value for a boolean
-option and should be migrated as a plain enable/disable decision.
+旧源码增加了 EEPROM 可编辑的 Z 安全归零 X/Y 坐标，默认 `(10,10)`，但旧配置
+并未启用 `Z_SAFE_HOMING`，所以该菜单在发布配置中实际上不影响回零。新版启用
+标准 `Z_SAFE_HOMING` 并固定使用床中心，属于安全增强和明确的行为变化。
 
-## SD And Power-Loss Recovery
+## 7. 断料与 M600
 
-- SD support enabled on the LCD connection.
-- Power-loss recovery enabled without a dedicated power-loss input pin.
-- Legacy behavior stores recovery data on SD.
+- 断料触发脚本：`M600`
+- 卸料：`50 mm`，`10 mm/s`
+- 慢速装料：`40 mm`，`5 mm/s`
+- 快速装料：`0 mm`，`5 mm/s`，加速度 `15 mm/s²`
+- 连续清料：启用；自动清料长度 `0`
+- 卸料前回抽/等待/清料：`3 mm / 2000 ms / 0 mm`
+- 喷嘴超时：`300 s`
+- 停靠点：X10、Y105、Z 抬升 20
+- `PARK_HEAD_ON_PAUSE`：旧版未启用
 
-This feature must be tested for SD wear, write reliability, and successful
-resume on the actual controller before being considered complete.
+旧版写成 `PAUSE_PARK_NO_STEPPER_TIMEOUT 500`，但该项是布尔宏，数值 `500`
+不会得到预期的“500 秒”效果。新版按真正的布尔开关启用，在 M600 期间保持
+XYZ 电机上电，这是对旧配置错误的修正。
 
-## LCD, Language, And Branding
+## 8. SD 与掉电恢复
 
-- Simplified Chinese is selected.
-- The old fork adds a custom UTF-8 lookup table, custom Chinese glyph data,
-  menu translations, and slower ST7920 timing.
-- It adds a top-level settings menu for motor direction, encoder direction,
-  homing coordinates, cold extrusion, soft endstops, and EEPROM actions.
-- It hides the ABS preheat entry and exposes nozzle-only preheat.
-- It shows the current SD filename while waiting for hotend or bed heat.
-- A custom bootscreen exists, but the shipped configuration does not enable it.
-- Legacy branding is inconsistent (`T3`, `MiniTree2`, `MiniTree V2.22`,
-  `v0.96 beta`). New branding should consistently use `MiniTree T3`.
+- LCD SD 支持启用
+- 掉电恢复启用，开机默认开启
+- 没有专用掉电检测引脚，恢复状态写入 SD
+- 打印结束释放电机；旧 `"M84 X Y Z E"` 与新版 `"M84"` 对本机效果等价
+- FAT 目录按较新文件优先显示
 
-Marlin 2.1.2 has a different LCD and localization architecture and already
-contains native Simplified Chinese font pages. Port the required labels and
-behavior to the current menu APIs; do not copy old font and UTF mapper files.
+掉电恢复必须在实机上验证恢复坐标、加热顺序、文件完整性和 SD 写入可靠性；
+编译通过不能证明真实断电恢复安全。
 
-## EEPROM And Custom Source Features
+## 9. LCD、中文和品牌
 
-The legacy EEPROM version is `M01` and stores three extra groups:
+- 旧版使用自制中文字体、`MAPPER_HASHCN` 和 UTF-8 查表。
+- 旧映射器固定按三字节读取，不能正确处理部分两字节字符，并会误判部分 ASCII。
+- 新版使用 Marlin 2.1.2 原生 `zh_CN` 语言和字库，不复制旧字体和映射器。
+- 旋钮方向使用原生 `REVERSE_ENCODER_DIRECTION` 在编译期固定。
+- ST7920 三段延时保留为旧硬件使用的 `125/125/125 ns`。
+- 旧版存在 `_Bootscreen.h`，但 `SHOW_BOOTSCREEN` 和
+  `SHOW_CUSTOM_BOOTSCREEN` 都未启用；新版也关闭启动画面。
+- 旧版品牌字符串混用 `T3`、`MiniTree2`、`MiniTree V2.22` 和
+  `v0.96 beta`；新版统一为 `MiniTree T3 / Marlin 2.1.2.8`。
 
-1. Runtime motor direction.
-2. Runtime encoder direction.
-3. X/Y homing destination.
+旧版隐藏 ABS 预热并提供喷嘴单独预热。Marlin 2.1.2 的原生温度菜单已经支持
+按加热器预热，旧版专用菜单代码不再直接复制；是否只保留 PLA 预热档位需结合
+实际操作习惯确认。
 
-Marlin 2.1.2 uses a different settings layout. Old EEPROM bytes are not
-binary-compatible. The migration must start with factory defaults and use
-`M502`, then `M500`, after recording any calibration values needed from the old
-printer.
+## 10. 私有 EEPROM 与源码功能
 
-Additional old source changes:
+旧 EEPROM 版本为 `M01`，额外保存：
 
-- `X1` command: returns an M105-like heater state for a Wi-Fi module. Its
-  comment claims JSON, but the implementation does not produce JSON.
-- Heating status messages include the active SD filename.
-- LCD "set home offsets" automatically runs `M500` and `M501`.
-- Runtime encoder direction is stored in EEPROM.
-- ST7920 delays are set to 125 ns for all three timing slots.
+1. X/Y/Z/E 运行时电机方向。
+2. 运行时旋钮方向。
+3. Z 安全归零 X/Y 坐标。
 
-## Safety Decisions For This Migration
+Marlin 2.1.2 的设置结构与 `M01` 二进制布局不兼容。升级前必须记录 `M503`
+输出，升级后执行 `M502`、`M500`，不能直接复用旧 EEPROM 内容。
 
-The following legacy changes are documented but intentionally not ported
-without hardware evidence:
+其他旧源码功能：
 
-- Default cold extrusion allowed.
-- Negative bed temperature clamped to zero.
-- Runtime motor-direction editing from the LCD.
-- Disabling all maximum software endstops.
-- Custom EEPROM binary layout.
-- The custom `X1` protocol without a captured client-side specification.
+- `X1`：给 Wi-Fi 模块返回类似 M105 的温度状态；注释声称是 JSON，但实际
+  输出不是 JSON，且没有客户端协议样本。
+- M109/M190 等待加热时在状态栏附加当前 SD 文件名。
+- “设置原点偏移”后自动执行 `M500`、`M501`。
+- LCD 顶层私有设置菜单。
 
-They remain open verification items in the migration checklist.
+`X1` 在协议确认前不能安全迁移。其余 UI 行为不是核心运动功能，迁移状态和
+取舍见迁移审计文档。
+
+## 11. 旧版 32 个非示例文件逐项核对
+
+| 旧版文件 | 旧改动性质 | 2.1.2 处理 |
+| --- | --- | --- |
+| `Marlin/Configuration.h` | 机器、运动、温控、探针、断料、LCD、SD 配置 | 已移植；MINTEMP 和软件限位采用安全差异 |
+| `Marlin/Configuration_adv.h` | 热保护、M600、SD、掉电恢复 | 已移植；错误布尔宏已修正 |
+| `Marlin/Marlin.h` | 注释/标识 | 无运行功能，无需移植 |
+| `Marlin/Marlin.ino` | 注释/标识 | 无运行功能，无需移植 |
+| `Marlin/Marlin_main.cpp` | G28、`X1`、M109/M190 文件名、运行时参数 | G28 原生替代；`X1` 和文件名显示待确认 |
+| `Marlin/Max7219_Debug_LEDs.h` | 注释/标识 | 无运行功能，无需移植 |
+| `Marlin/SanityCheck.h` | 注释/标识 | 无运行功能，无需移植 |
+| `Marlin/SdFatConfig.h` | 空行 | 无运行功能，无需移植 |
+| `Marlin/Version.h` | 私有版本、机器名、网址 | 已由 `_Version.h` 统一替代 |
+| `Marlin/_Bootscreen.h` | 自定义位图资源 | 旧版未启用，新版不迁移并关闭启动画面 |
+| `Marlin/configuration_store.cpp` | `M01` 私有 EEPROM 字段 | 有意不移植；使用新版原生 EEPROM |
+| `Marlin/dogm_font_data_ISO10646_CN.h` | 自制中文字体 | 由新版原生 `zh_CN` 字库替代 |
+| `Marlin/language_cn.h` | 旧中文语言文本 | 由新版 `zh_CN` 替代 |
+| `Marlin/language_en.h` | 私有菜单英文标签 | 私有菜单未移植，原生菜单已有对应项 |
+| `Marlin/language_zh_CN.h` | 自定义简体中文菜单 | 由新版原生翻译替代；措辞不保证逐字一致 |
+| `Marlin/pins_5DPRINT.h` | 仅文件权限变化 | 无需移植 |
+| `Marlin/pins_RAMPS.h` | D19、MAX/E1 引脚、屏幕时序 | D19 和时序已移植；破坏性引脚删改不移植 |
+| `Marlin/pins_RAMPS_ENDER_4.h` | 仅文件权限变化 | 无需移植 |
+| `Marlin/pins_TEENSYLU.h` | 仅文件权限变化 | 无需移植 |
+| `Marlin/planner.cpp` | EEPROM 归零坐标变量 | 旧配置实际未生效；由标准床中心安全归零替代 |
+| `Marlin/planner.h` | 上述变量声明 | 同上 |
+| `Marlin/stepper.cpp` | 运行时修改电机方向 | 有安全风险，不移植 |
+| `Marlin/stepper.h` | 运行时方向接口 | 有安全风险，不移植 |
+| `Marlin/temperature.cpp` | 默认冷挤出、负热床温度归零 | 有意不移植，恢复标准安全行为 |
+| `Marlin/temperature.h` | 冷挤出状态接口 | 使用新版原生 M302 状态，不复制私有接口 |
+| `Marlin/ultralcd.cpp` | 私有设置菜单、预热、EEPROM 操作 | 部分由原生菜单替代；危险/无效项不移植 |
+| `Marlin/ultralcd.h` | 私有 LCD 状态声明 | 私有菜单未复制，无需移植 |
+| `Marlin/ultralcd_impl_DOGM.h` | 中文映射和 SD 文件名显示 | 使用新版原生 UTF-8/字库；需实测中文文件名 |
+| `Marlin/ultralcd_impl_HD44780.h` | 文本/显示小改动 | 本机使用 DOGM，不影响运行 |
+| `Marlin/ultralcd_st7920_u8glib_rrd.h` | `125/125/125 ns` 时序 | 已通过配置层等价移植 |
+| `Marlin/utf_mapper.h` | 自制中文 UTF-8 映射模块 | 由新版原生语言框架替代 |
+| `README.md` | T3 仓库标题 | 设备身份已进入版本文件和本维护文档 |
+
+## 12. 不应自动恢复的旧行为
+
+- 开机默认允许冷挤出。
+- 将负热床温度强制显示为 0。
+- 打印中通过 LCD 修改电机方向。
+- 直接复制 `M01` EEPROM 二进制布局。
+- 在未取得客户端协议前恢复 `X1`。
+- 为追求表面一致而关闭新版全部软件限位。
+
+这些项目不是遗漏，而是经过审计后保留的安全或兼容性决策。
