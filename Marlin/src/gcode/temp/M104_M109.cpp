@@ -38,10 +38,6 @@
 
 #include "../../MarlinCore.h" // for startOrResumeJob, etc.
 
-#if BOTH(SDSUPPORT, SHOW_SD_FILENAME_DURING_HEATING)
-  #include "../../sd/cardreader.h"
-#endif
-
 #if ENABLED(PRINTJOB_TIMER_AUTOSTART)
   #include "../../module/printcounter.h"
   #if ENABLED(CANCEL_OBJECTS)
@@ -125,13 +121,8 @@ void GcodeSuite::M104_M109(const bool isM109) {
       thermalManager.auto_job_check_timer(isM109, true);
     #endif
 
-    if (thermalManager.isHeatingHotend(target_extruder) || !no_wait_for_cooling) {
+    if (thermalManager.isHeatingHotend(target_extruder) || !no_wait_for_cooling)
       thermalManager.set_heating_message(target_extruder, !isM109 && got_temp);
-      #if BOTH(SDSUPPORT, SHOW_SD_FILENAME_DURING_HEATING)
-        if (isM109 && card.isPrinting())
-          ui.set_status(card.longest_filename(), true);
-      #endif
-    }
   }
 
   TERN_(AUTOTEMP, planner.autotemp_M104_M109());

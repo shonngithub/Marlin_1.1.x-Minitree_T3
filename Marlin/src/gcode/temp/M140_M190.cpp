@@ -34,10 +34,6 @@
 #include "../../module/temperature.h"
 #include "../../lcd/marlinui.h"
 
-#if BOTH(SDSUPPORT, SHOW_SD_FILENAME_DURING_HEATING)
-  #include "../../sd/cardreader.h"
-#endif
-
 /**
  * M140 - Set Bed Temperature target and return immediately
  * M190 - Set Bed Temperature target and wait
@@ -87,10 +83,6 @@ void GcodeSuite::M140_M190(const bool isM190) {
 
   thermalManager.setTargetBed(temp);
   thermalManager.isHeatingBed() ? LCD_MESSAGE(MSG_BED_HEATING) : LCD_MESSAGE(MSG_BED_COOLING);
-  #if BOTH(SDSUPPORT, SHOW_SD_FILENAME_DURING_HEATING)
-    if (isM190 && card.isPrinting())
-      ui.set_status(card.longest_filename(), true);
-  #endif
 
   // With PRINTJOB_TIMER_AUTOSTART, M190 can start the timer, and M140 can stop it
   TERN_(PRINTJOB_TIMER_AUTOSTART, thermalManager.auto_job_check_timer(isM190, !isM190));

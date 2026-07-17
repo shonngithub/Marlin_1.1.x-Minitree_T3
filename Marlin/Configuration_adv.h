@@ -1445,8 +1445,7 @@
   #endif
 
   // Scroll a longer status message into view
-  #define STATUS_MESSAGE_SCROLLING
-  #define SHOW_SD_FILENAME_DURING_HEATING // MiniTree T3: Show the active SD file during M109 / M190.
+  //#define STATUS_MESSAGE_SCROLLING
 
   // Apply a timeout to low-priority status messages
   //#define STATUS_MESSAGE_TIMEOUT_SEC 30 // (seconds)
