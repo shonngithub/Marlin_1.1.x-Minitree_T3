@@ -39,6 +39,7 @@ namespace Language_zh_CN {
   LSTR MSG_NO                             = _UxGT("否");
   LSTR MSG_BACK                           = _UxGT("返回");     // ”Back“
   LSTR MSG_MEDIA_ABORTING                 = _UxGT("放弃中...");
+  LSTR MSG_MEDIA_INIT_FAIL                = _UxGT("存储卡初始化失败");
   LSTR MSG_MEDIA_INSERTED                 = _UxGT("存储卡已插入");     // "Card inserted"
   LSTR MSG_MEDIA_REMOVED                  = _UxGT("存储卡被拔出");     // "Card removed"
   LSTR MSG_MEDIA_WAITING                  = _UxGT("等待存储器");
@@ -57,6 +58,7 @@ namespace Language_zh_CN {
   LSTR MSG_PROGRESS_BAR_TEST              = _UxGT("进度条测试");     // "Progress Bar Test"
   LSTR MSG_HOMING                         = _UxGT("回原点");
   LSTR MSG_AUTO_HOME                      = _UxGT("自动回原点");     // "Auto home"
+  LSTR MSG_AUTO_HOME_A                    = _UxGT("回@原位");
   LSTR MSG_AUTO_HOME_X                    = _UxGT("回X原位");     // "Home X"
   LSTR MSG_AUTO_HOME_Y                    = _UxGT("回Y原位");     // "Home Y"
   LSTR MSG_AUTO_HOME_Z                    = _UxGT("回Z原位");     // "Home Z"
@@ -68,6 +70,7 @@ namespace Language_zh_CN {
   LSTR MSG_Z_FADE_HEIGHT                  = _UxGT("淡出高度");     // "Fade Height"
   LSTR MSG_SET_HOME_OFFSETS               = _UxGT("设置原点偏移");     // "Set home offsets"
   LSTR MSG_HOME_OFFSETS_APPLIED           = _UxGT("偏移已启用");     // "Offsets applied"
+  LSTR MSG_ERR_M428_TOO_FAR               = _UxGT("距限位太大");
   #if HAS_PREHEAT
     LSTR MSG_PREHEAT_1                    = _UxGT("预热 ") PREHEAT_1_LABEL;     // "Preheat PREHEAT_2_LABEL"
     LSTR MSG_PREHEAT_1_H                  = _UxGT("预热 ") PREHEAT_1_LABEL " ~";     // "Preheat PREHEAT_2_LABEL"
@@ -260,6 +263,7 @@ namespace Language_zh_CN {
   LSTR MSG_LCD_OFF                        = _UxGT("关");     // "Off"
   LSTR MSG_PID_AUTOTUNE                   = _UxGT("自动PID");
   LSTR MSG_PID_AUTOTUNE_E                 = _UxGT("自动PID *");
+  LSTR MSG_PID_CYCLE                      = _UxGT("PID循环数");
   LSTR MSG_PID_AUTOTUNE_DONE              = _UxGT("PID调整完成");
   LSTR MSG_PID_BAD_EXTRUDER_NUM           = _UxGT("自动调失败! 坏的挤出机");
   LSTR MSG_PID_TEMP_TOO_HIGH              = _UxGT("自动调失败! 温度太高");
@@ -378,6 +382,7 @@ namespace Language_zh_CN {
   LSTR MSG_SINGLENOZZLE_PRIME_SPEED       = _UxGT("进给速度");
   LSTR MSG_SINGLENOZZLE_RETRACT_SPEED     = _UxGT("回抽速度");
   LSTR MSG_FILAMENT_PARK_ENABLED          = _UxGT("停靠头");
+  LSTR MSG_PARK_FAILED                    = _UxGT("喷头停靠失败");
   LSTR MSG_SINGLENOZZLE_UNRETRACT_SPEED   = _UxGT("恢复速度");
   LSTR MSG_SINGLENOZZLE_FAN_SPEED         = _UxGT("风扇速度");
   LSTR MSG_SINGLENOZZLE_FAN_TIME          = _UxGT("风扇时间");
@@ -605,6 +610,7 @@ namespace Language_zh_CN {
   LSTR MSG_HEATER_TIMEOUT                 = _UxGT("加热器超时");
   LSTR MSG_REHEAT                         = _UxGT("重新加热");
   LSTR MSG_REHEATING                      = _UxGT("重新加热中...");
+  LSTR MSG_REHEATDONE                     = _UxGT("重新加热完成");
 
   LSTR MSG_SHORT_DAY                      = _UxGT("天");     // "d" // One character only
   LSTR MSG_SHORT_HOUR                     = _UxGT("时");     // "h" // One character only
