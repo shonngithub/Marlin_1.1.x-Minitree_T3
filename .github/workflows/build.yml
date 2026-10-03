@@ -9,7 +9,7 @@ on:
       environment:
         description: "PlatformIO environment to build"
         required: false
-        default: megaatmega2560
+        default: mega2560
         type: string
 
 permissions:
@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   build:
-    name: Build ${{ inputs.environment || 'megaatmega2560' }}
+    name: Build ${{ inputs.environment || 'mega2560' }}
     runs-on: ubuntu-22.04
 
     steps:
@@ -42,14 +42,14 @@ jobs:
 
       - name: Build firmware
         env:
-          PIO_ENV: ${{ inputs.environment || 'megaatmega2560' }}
+          PIO_ENV: ${{ inputs.environment || 'mega2560' }}
         run: pio run --environment "$PIO_ENV"
 
       - name: Upload firmware artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: marlin-${{ inputs.environment || 'megaatmega2560' }}
+          name: marlin-${{ inputs.environment || 'mega2560' }}
           if-no-files-found: error
           path: |
-            .pio/build/${{ inputs.environment || 'megaatmega2560' }}/firmware.hex
-            .pio/build/${{ inputs.environment || 'megaatmega2560' }}/firmware.elf
+            .pio/build/${{ inputs.environment || 'mega2560' }}/firmware.hex
+            .pio/build/${{ inputs.environment || 'mega2560' }}/firmware.elf
