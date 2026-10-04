@@ -1548,6 +1548,11 @@
   // Since the FAT gets out of order with usage, SDCARD_SORT_ALPHA is recommended.
   #define SDCARD_RATHERRECENTFIRST
 
+  // MiniTree T3: hide the media menu's "Change SD card" item (M21).
+  // This machine has a working SD_DETECT_PIN, so media is mounted and released
+  // automatically and the manual item has no visible effect.
+  #define HIDE_MEDIA_CHANGE_ITEM
+
   #define SD_MENU_CONFIRM_START             // Confirm the selected SD file before printing
 
   //#define NO_SD_AUTOSTART                 // Remove auto#.g file support completely to save some Flash, SRAM

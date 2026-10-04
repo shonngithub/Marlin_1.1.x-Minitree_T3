@@ -1782,7 +1782,7 @@ void MarlinUI::init() {
           quick_feedback();
           goto_screen(MEDIA_MENU_GATEWAY);
         #else
-          LCD_MESSAGE(MSG_MEDIA_INSERTED);
+          LCD_MESSAGE_MIN(MSG_MEDIA_INSERTED); // MiniTree T3: level -1 clears a stuck media alert
         #endif
       }
     }
@@ -1791,7 +1791,7 @@ void MarlinUI::init() {
         #if ENABLED(EXTENSIBLE_UI)
           ExtUI::onMediaRemoved();
         #elif HAS_SD_DETECT
-          LCD_MESSAGE(MSG_MEDIA_REMOVED);
+          LCD_MESSAGE_MIN(MSG_MEDIA_REMOVED); // MiniTree T3: level -1 clears a stuck media alert
           #if HAS_MARLINUI_MENU
             if (!defer_return_to_status) return_to_status();
           #endif

@@ -281,7 +281,9 @@ void menu_main() {
           #endif
 
           #if HAS_SD_DETECT
-            GCODES_ITEM(MSG_CHANGE_MEDIA, F("M21" TERN_(MULTI_VOLUME, "S"))); // M21 Change Media
+            #if DISABLED(HIDE_MEDIA_CHANGE_ITEM)
+              GCODES_ITEM(MSG_CHANGE_MEDIA, F("M21" TERN_(MULTI_VOLUME, "S"))); // M21 Change Media
+            #endif
             #if ENABLED(MULTI_VOLUME)
               GCODES_ITEM(MSG_ATTACH_USB_MEDIA, F("M21U")); // M21 Attach USB Media
             #endif
@@ -398,7 +400,9 @@ void menu_main() {
         #endif
 
         #if HAS_SD_DETECT
-          GCODES_ITEM(MSG_CHANGE_MEDIA, F("M21" TERN_(MULTI_VOLUME, "S"))); // M21 Change Media
+          #if DISABLED(HIDE_MEDIA_CHANGE_ITEM)
+            GCODES_ITEM(MSG_CHANGE_MEDIA, F("M21" TERN_(MULTI_VOLUME, "S"))); // M21 Change Media
+          #endif
           #if ENABLED(MULTI_VOLUME)
             GCODES_ITEM(MSG_ATTACH_USB_MEDIA, F("M21U")); // M21 Attach USB Media
           #endif
