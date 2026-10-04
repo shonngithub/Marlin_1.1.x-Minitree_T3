@@ -380,6 +380,118 @@ Marlin 2.x 的 `zh_CN` 把对应的 `MSG_OUTAGE_RECOVERY` 译成了 **“中断�
 提示，这属于正常行为。因此复现时应当打印到第 2~3 层之后再断电，并在断电后先把卡拿到
 电脑上确认根目录有没有 `PLR` 文件，再装回开机看提示。
 
+### 2.3.8 上位机接口选项与实测开销
+
+`M115` 的 `Cap:` 行是宿主判断固件能力的依据（映射关系见 `M115.cpp:128-196`）。
+刷入启用 `EMERGENCY_PARSER` 的构建后（`Compiled: Oct 4 2026 19:30:14`，Flash `172050`），
+本机当前状态：
+
+| Cap | 状态 | 对应命令 |
+| --- | --- | --- |
+| `AUTOREPORT_TEMP` | 开 | `M155` 主动推温度 |
+| `PRINT_JOB` | 开 | `M75/M76/M77` 打印计时 |
+| `SDCARD` / `SD_WRITE` | 开 | `M20/M23/M24`、`M28/M29/M928` |
+| `AUTOLEVEL` / `Z_PROBE` / `LEVELING_DATA` / `RUNOUT` | 开 | `G29`、`G30`、`M420 V`、`M412/M600` |
+| **`EMERGENCY_PARSER`** | **本次改为开** | `M108/M112/M410/M876` |
+| `HOST_ACTION_COMMANDS` / `PROMPT_SUPPORT` | 关 | 固件向宿主发 `//action:...` |
+| `AUTOREPORT_POS` / `AUTOREPORT_SD_STATUS` | 关 | `M154` / `M27 S` |
+| `BINARY_FILE_TRANSFER` | 关 | `M28/M29` 二进制协议 |
+| `LONG_FILENAME` / `LFN_WRITE` | 关 | `M33`；宿主看到的也是 8.3 短名 |
+| `MEATPACK` | 关 | Prusa 自家协议，与本机无关 |
+
+三类接口的含义：
+
+- **`EMERGENCY_PARSER`**：让 `M108/M112/M410/M876` 在串口接收中断里解析，不排队。
+  差别体现在打印机被阻塞时——卡在 `M109` 等升温、`M600` 暂停或 SD 打印中，宿主发的
+  `M112`（急停）/`M410`（快速停止）立刻生效；`M108` 可直接跳出 `M109/M190/M303` 的等待。
+  `SOFT_RESET_VIA_SERIAL`（宿主发 `KILL`/`^X` 软复位）也依赖它。它只在宿主向 SD 写文件
+  期间被临时关闭（`cardreader.cpp:737/874`）。
+- **`HOST_ACTION_COMMANDS` + `HOST_PROMPT_SUPPORT`**：固件向宿主输出
+  `//action:pause|paused|resume|resumed|cancel|notification|prompt_begin|prompt_button|prompt_show|prompt_end`
+  等行（`host_actions.cpp:44`），宿主据此弹自己的对话框；用户点按钮后宿主回 `M876 S<编号>`，
+  固件在 `HostUI::handle_response()` 执行对应动作。典型价值是 M600 换料和断电续打提示
+  能同时出现在宿主界面上，而不只是 12864 屏。三个宏是嵌套关系，必须一起开
+  （`Configuration_adv.h:3868-3877`）。
+- **报告类**：`AUTO_REPORT_POSITION`（`M154`）、`AUTO_REPORT_SD_STATUS`（`M27 S`）、
+  `BUILD_PERCENT`（`M73`）。注意 `Cap:PROGRESS` 在 `M115.cpp:132` 是硬编码 `false`，
+  不是配置项。
+
+实测开销（基线为不含这些选项的 `5374 / 172008`）：
+
+| 变体 | RAM | Flash | ΔRAM | ΔFlash |
+| --- | --- | --- | --- | --- |
+| `EMERGENCY_PARSER` | 5380 | 172050 | **+6** | **+42** |
+| 上者 + 宿主对话框三件套 | 5383 | 173608 | +9 | +1600 |
+| 上者 + `BINARY_FILE_TRANSFER` | 6241 | 179730 | **+867** | +7722 |
+
+结论：`EMERGENCY_PARSER` 几乎免费，已启用；对话框三件套只多 1.6KB flash，也很便宜，但
+**只有接了上位机才有意义**，暂不启用；`BINARY_FILE_TRANSFER` 在 Mega2560 上一口吃掉
+867 字节 RAM（占用率跳到 76.2%），不划算——它想真正提速还要把 `RX_BUFFER_SIZE` 提到
+≥1024 并开 `SERIAL_XON_XOFF`（`Configuration_adv.h:2422-2431`），更放不下。
+
+### 2.3.9 LCD 背光亮度不可用软件调节
+
+本机的 12864（RepRapDiscount Full Graphic，ST7920）**亮度无法通过固件调节**，连
+“开关背光”也做不到。原因是两层的：
+
+1. **硬件**：该模块背光是 5V 经限流电阻直供 LED，RAMPS 侧没有把它接到任何 MCU 引脚。
+   `pins_RAMPS.h` 只为 MKS mini12864、BQ 等控制器定义了 `LCD_BACKLIGHT_PIN`
+   （`pins_RAMPS.h:736/797/867`）；本机使用的
+   `REPRAP_DISCOUNT_FULL_GRAPHIC_SMART_CONTROLLER` 分支没有定义，因此
+   `PIN_EXISTS(LCD_BACKLIGHT)` 为假。文件里还有一条现成注释：
+   “MKS mini12864 can't adjust backlight by software!”。
+2. **固件**：Marlin 的亮度菜单项（`MSG_BRIGHTNESS`，`menu_configuration.cpp:542`）只在
+   `HAS_LCD_BRIGHTNESS` 时编译，而该宏仅对 DWIN/E3V2 屏定义
+   （`Conditionals_LCD.h:1020-1024`）。DOGM 分支的 `MarlinUI::_set_brightness()`
+   （`marlinui_DOGM.cpp:351`）也只对存在且支持 PWM 的 `TFT_BACKLIGHT_PIN` 生效。
+   `LCD_BACKLIGHT_TIMEOUT_MINS`（息屏）同样要求 `LCD_BACKLIGHT_PIN` 存在
+   （`SanityCheck.h:2662` 会直接报错）。
+
+如需调光只能**改硬件**：断开背光 5V 直供，改由 MOS 管/三极管从空闲的 PWM 引脚驱动
+（Mega2560 的 PWM 引脚为 D2–D13、D44–D46；本机未接舵机，`SERVO0_PIN`（D7 或 D11，
+见 `pins_RAMPS.h:65-69`）通常为空，D11 支持 PWM）。软件侧两条路：
+
+- 用现成的 `CASE_LIGHT_ENABLE` + `CASE_LIGHT_DEFAULT_BRIGHTNESS`（默认带 PWM 亮度）
+  + `CASE_LIGHT_MENU`，之后用 `M355 S0-255` 或 LCD 菜单调（`Configuration_adv.h:705-722`）；
+- 或自行在 `LCD_BACKLIGHT_PIN` 上 `analogWrite`。
+
+注意 Marlin 的 `ui.brightness`（菜单里的“亮度”）不会自动接管 `LCD_BACKLIGHT_PIN`，
+想进 LCD 菜单就得走 `CASE_LIGHT` 那条路。
+
+### 2.3.10 外接 ESP32 作上位机
+
+**可行**，且 Marlin 侧基本不用改。`Configuration_adv.h:4088` 的注释写得很清楚：
+`WIFISUPPORT` 是 “Marlin embedded WiFi management. **Not needed for simple WiFi serial
+port.**”；而 `ESP3D_WIFISUPPORT` 及紧随其后的 `WIFI_SSID/WIFI_PWD` 那一整块是给
+**以 ESP32 为主控的板子**（Marlin 自己跑在 ESP32 上）准备的，Mega2560 用不上。外接
+ESP32 只是“串口另一头的宿主”，跑 ESP3D 或自己写的固件即可。
+
+接线要点：本机四个硬件串口里只有一个真正空闲。
+
+| 串口 | 引脚 | 本机占用情况 |
+| --- | --- | --- |
+| Serial0 | D0/D1 | 已接 USB 转串口（16U2），与 PC 共用，不建议并接 |
+| Serial1 | D18/D19 | **占用**：D18 = Z-MIN 限位，D19 = Z-MAX / 断料传感器 |
+| Serial2 | D16/D17 | **空闲**，引在 AUX-4 排针，**推荐** |
+| Serial3 | D14/D15 | **占用**：Y-MIN / Y-MAX 限位 |
+
+（限位引脚见 `pins_RAMPS.h:112-131`，串口对应见 `pins_RAMPS.h:366-368`。）
+
+因此推荐 **ESP32 ↔ Serial2（D16/D17，AUX-4）+ GND**，并在 `Configuration.h` 启用第二串口：
+
+```cpp
+#define SERIAL_PORT_2 2
+```
+
+这样 USB（Serial0）仍可用于 PC 调试，ESP32 走 Serial2，互不干扰。ESP32 侧常见做法是刷
+**ESP3D**（luc-github/ESP3D），提供网页终端、文件上传和打印控制；它作为宿主发标准
+G-code，所以 2.3.8 里那些接口选项（尤其 `EMERGENCY_PARSER`、`HOST_ACTION_COMMANDS` 与
+`HOST_PROMPT_SUPPORT`）到那时才会体现价值。启用 `SERIAL_PORT_2` 会增加少量 flash/RAM
+（第二个串口的接收缓冲），实施时应重新构建并记录容量。
+
+补充：旧固件里的 `X1` 命令就是为外接 Wi-Fi 模块准备的（迁移时已确认不需要），说明这台
+机器原本就预留过“串口接 Wi-Fi 模块”的用法。
+
 ## 3. 核心功能逐项核对
 
 | ID | 旧版功能 | Marlin 2.1.2 处理 | 状态 |
@@ -711,9 +823,13 @@ M503
   对照见 2.3.2。
 - 实机遍历新版启用功能的中文菜单，记录仍显示英文或缺字的项目并按需补充。
 - 长文件名三项的实测开销已记录（2.3.5），当前决定暂不启用。
-- SD 卡插拔后“存储卡初始化失败”不消失：已定位（2.3.6）并按最小改动打补丁（9.1），
-  待下次构建刷入后复验。
-- 断电续打功能确认存在，只是菜单文案改为“中断恢复”（2.3.7）；仍需一次真实断电测试。
+- SD 卡插拔后“存储卡初始化失败”不消失：已定位（2.3.6）、打补丁（9.1）并现场验证通过，
+  插回卡后提示正确变为“存储卡已插入”。
+- 断电续打已验证可用（2.3.7）：从 SD 卡打印到第 2 层之后断电，重新开机出现“中断恢复”
+  提示，`PLR` 落盘与 `M1000 S` 提示路径均正常。
+- 媒体菜单已隐藏“更换存储卡”，现场确认菜单里只剩“从存储卡上打印”（9.2）。
+- 上位机接口：`EMERGENCY_PARSER` 已启用，其余选项的实测开销见 2.3.8；LCD 背光不可用
+  软件调光（2.3.9）；外接 ESP32 作上位机的接线与配置方案见 2.3.10。
 - 实机运行构建与库内 `1.1.x` 源码存在不一致：EEPROM 中 `M01` 位于偏移 `52`（源码为 `100`），
   且旧版 `allow_cold_extrude` 编译默认为 `true` 而现场读数为“关”。旧版源码只能作为参考，
   不能当作实机行为的精确依据。
@@ -727,13 +843,14 @@ M503
 以下改动不是旧版遗留定制，而是迁移到 Marlin 2.1.2 之后为修复实机问题新增的补丁。
 升级上游源码或重新合并时，需要连同这些改动一起处理。
 
-**当前装机状态**：9.1 与 9.2 已合入，并用本地构建（`Compiled: Oct 4 2026 18:54:43`，
-RAM `5374`、Flash `172008`）通过 COM6 刷入。刷写使用 avrdude `-D`，EEPROM 未被擦除，
-启动仍读到 `V88 stored settings retrieved (607 bytes; crc 15538)`，与刷写前一致；
+**当前装机状态**：9.1 与 9.2 已合入，`Configuration_adv.h` 另启用了 `EMERGENCY_PARSER`。
+最近一次为本地构建（`Compiled: Oct 4 2026 19:30:14`，RAM `5380`、Flash `172050`），通过
+COM6 刷入后 `M115` 报 `Cap:EMERGENCY_PARSER:1`。刷写使用 avrdude `-D`，EEPROM 未被擦除，
+启动仍读到 `V88 stored settings retrieved (607 bytes; crc 15538)`；
 `M412 S0`、`M413 S1` 等现场设置保留。
 
 曾刷入过一版 9.2 守卫写错的构建（Flash `172096`），该版本媒体菜单里出现的是“释放存储卡”
-而不是“更换存储卡”，已用修正版覆盖。两个补丁的 LCD 行为仍待现场确认。
+而不是“更换存储卡”，已用修正版覆盖。两个补丁的 LCD 行为均已现场确认正常。
 
 ### 9.1 媒体插拔消息改用 `LCD_MESSAGE_MIN`
 
