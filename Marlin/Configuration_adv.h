@@ -3122,7 +3122,9 @@
    * STEALTHCHOP_(XY|Z|E) must be enabled to use HYBRID_THRESHOLD.
    * M913 X/Y/Z/E to live tune the setting
    */
-  //#define HYBRID_THRESHOLD
+  // MiniTree T3: enabled per the MKS wiki UART-mode setup so high-speed moves fall back
+  // to spreadCycle instead of losing torque under stealthChop.
+  #define HYBRID_THRESHOLD
 
   #define X_HYBRID_THRESHOLD     100  // [mm/s]
   #define X2_HYBRID_THRESHOLD    100
@@ -3218,7 +3220,8 @@
    * Enable M122 debugging command for TMC stepper drivers.
    * M122 S0/1 will enable continuous reporting.
    */
-  //#define TMC_DEBUG
+  // MiniTree T3: enabled so M122 reports the UART connection status of each driver
+  #define TMC_DEBUG
 
   /**
    * You can set your own advanced settings by filling in predefined functions.

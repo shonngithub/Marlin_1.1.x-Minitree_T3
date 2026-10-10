@@ -1670,9 +1670,11 @@
 // @section motion
 
 // Invert the stepper direction. Change (or reverse the motor connector) if an axis goes the wrong way.
-#define INVERT_X_DIR false
-#define INVERT_Y_DIR true
-#define INVERT_Z_DIR true
+// MiniTree T3: XYZ inverted vs the A4988 build — TMC2209 default direction is opposite to A4988/DRV8825
+// (per https://github.com/makerbase-mks/MKS-GEN_L/wiki/Drivers_MKS_TMC2209). Verify with a 1mm jog before homing!
+#define INVERT_X_DIR true
+#define INVERT_Y_DIR false
+#define INVERT_Z_DIR false
 //#define INVERT_I_DIR false
 //#define INVERT_J_DIR false
 //#define INVERT_K_DIR false
