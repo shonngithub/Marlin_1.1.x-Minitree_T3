@@ -492,6 +492,175 @@ G-code，所以 2.3.8 里那些接口选项（尤其 `EMERGENCY_PARSER`、`HOST_
 补充：旧固件里的 `X1` 命令就是为外接 Wi-Fi 模块准备的（迁移时已确认不需要），说明这台
 机器原本就预留过“串口接 Wi-Fi 模块”的用法。
 
+### 2.3.11 驱动升级：XYZ 换 TMC2209（UART 模式）
+
+本节记录分支 `codex/minitree-t3-tmc2209-xyz`：把 X/Y/Z 三个步进驱动从 A4988 换成
+TMC2209 并启用 UART 模式，**E0 保持 A4988 不变**。
+
+#### 为什么只换 XYZ
+
+噪声主要来自 X/Y 的快速空移和 Z 的持续高频啸叫；挤出机在打印头内、动作少、音量贡献最小。
+只换三个模块即可拿到大部分静音收益，将来要补 E0 也只是改一行加工位号。
+
+#### 主板事实：MKS GEN_L V2.1，不是 RAMPS 1.4
+
+这是本轮最重要的发现 —— 之前文档一直按 `BOARD_RAMPS_14_EFB` 记录，实际硬件是 MKS GEN_L V2.1：
+
+- 该板是 2560 + RAMPS 1.4 的集成版，**引脚与 RAMPS 兼容**（`pins_MKS_GEN_L_V21.h` 末尾
+  `#include "pins_RAMPS.h"`），所以现有的 `BOARD_RAMPS_14_EFB` 构建能正常工作
+- 仓库里有专门的板级定义 `BOARD_MKS_GEN_L_V21`（`Marlin/src/pins/pins.h:198`）；MKS 官方
+  Marlin 指南建议 V2.x 使用 `BOARD_MKS_GEN_L_V2`
+- 对本机当前配置（EFB、单热端、无舵机、A4988）两者功能等价：加热/风扇引脚相同
+  （`HEATER_0=10`、`FAN0=9`、`HEATER_BED=8`）
+- 差别只在以后会用到的部分：`X/Y/Z/E0_CS_PIN`（SPI 驱动）、`*_DIAG_PIN`（无传感器归零）、
+  `SERVO1/2/3_PIN`。**将来用 SPI 驱动或无传感器归零时应改用 `BOARD_MKS_GEN_L_V21`**
+
+MKS 官方 wiki（[Drivers_MKS_TMC2209](https://github.com/makerbase-mks/MKS-GEN_L/wiki/Drivers_MKS_TMC2209)）
+明确写着 UART 模式 **"Only MKS GEN_L V2.1 support"**，用驱动座旁的**跳线帽**设置，
+**不需要飞线**。官方引脚图的 `TMC2208-UART` 表给出每轴 UART 引脚：
+
+| 轴 | TX | RX |
+| --- | --- | --- |
+| X | D40 | A9 |
+| Y | A5 | A10 |
+| Z | D42 | A11 |
+| E0 | D44 | A12 |
+| E1 | D20 | D12 |
+
+**与 Marlin `pins_RAMPS.h` 的 TMC UART 默认值完全一致**（TX = `AUX2_06/03/08/07`，
+RX = `AUX2_04/05/10/09`），因此固件侧**不需要覆写** `*_SERIAL_TX/RX_PIN`。
+
+#### 配置改动
+
+| 改动 | 文件 | 原因 |
+| --- | --- | --- |
+| `X/Y/Z_DRIVER_TYPE TMC2209` | `Configuration.h:164-166` | 启用 UART 模式；`E0_DRIVER_TYPE` 保持 `A4988` |
+| `INVERT_X_DIR true`、`INVERT_Y_DIR false`、`INVERT_Z_DIR false` | `Configuration.h:1673-1675` | 官方说明 **TMC2209 默认方向与 A4988/DRV8825 相反**；E0 不动 |
+| `#define TMC_DEBUG` | `Configuration_adv.h:3223` | `M122` 详细报告需要它（官方 UART 测试步骤） |
+| `#define HYBRID_THRESHOLD` | `Configuration_adv.h:3125` | 官方 UART 段推荐；高于阈值自动切 spreadCycle 补扭矩 |
+| `X/Y/Z_SLAVE_ADDRESS 3` | `Configuration_adv.h:3004-3006` | 见下面的坑 |
+
+#### ⚠️ 最大的坑：UART 模式下 M0/M1 是"从机地址"，不是微步
+
+`Configuration_adv.h` 自带的地址表：
+
+```text
+ *  ADDRESS | MS1  | MS2
+ *       0 | LOW  | LOW
+ *       1 | HIGH | LOW
+ *       2 | LOW  | HIGH
+ *       3 | HIGH | HIGH
+```
+
+UART 模式下 TMC2209 的 MS1/MS2（板子丝印 `M0`/`M1`）含义从"微步选择"变成"**UART 从机地址**"：
+
+- 本机为兼容 A4988 的 1/16，`M0`/`M1` 跳线都插着（都接 VCC）→ **地址 3**
+- 而 Marlin 的 `*_SLAVE_ADDRESS` 默认是注释状态 = **地址 0**
+- 结果：固件对着地址 0 喊话，驱动在地址 3 上听着，**永远不回应**
+
+故障现象（留作以后排查对照）：
+
+```text
+Driver registers:
+		X	0x00:00:00:00	 Bad response!
+Testing X connection... Error: All LOW
+```
+
+注意 `Error: All LOW` 的含义是"RX 线全程低电平"（`tmc_util.cpp:1215-1234` 的
+`test_connection()` 返回 2），而"地址不对"更常见的表现是 `All HIGH` —— 所以当时一度怀疑
+RX 没接到驱动，实测排查后确认是地址不匹配。
+
+**两种修法**（任选其一；本分支采用后者）：
+
+1. 拔掉 X/Y/Z 的 `M0`/`M1` 跳线（地址变 0，与 Marlin 默认一致）—— 这也是 MKS 官方 UART
+   图里画的状态（图中 M0/M1 是空的）。UART 模式下细分由固件通过 `*_MICROSTEPS` 设定，
+   **拔掉不影响步距**
+2. 固件里写 `#define X/Y/Z_SLAVE_ADDRESS 3`（本分支采用，避免依赖引脚悬空电平）
+
+另外两条官方注意事项：
+
+- **M2 那一排三针跳线**是 UART 模式选择（wiki 的 ASCII 图 `O=O O M2`），桥接的是哪一对针
+  很关键（三针通常是 `[VCC] [驱动 MS3/PDN] [MCU UART 网]`）
+- **不用无传感器归零时，按官方要求要拔掉相应跳线帽**；这一组与 UART 选择**不是同一个**，
+  很容易拔错
+
+#### 容量记录
+
+| 阶段 | RAM | Flash |
+| --- | --- | --- |
+| 全 A4988 基线 | 5380 (65.7%) | 172050 (67.7%) |
+| + XYZ 改 TMC2209 | 5682 (69.4%) | 182146 (71.7%) |
+| + `TMC_DEBUG` + `HYBRID_THRESHOLD` + 方向翻转 | 5711 (69.7%) | 191606 (75.4%) |
+| + `*_SLAVE_ADDRESS 3`（当前装机） | 5711 (69.7%) | 191608 (75.5%) |
+
+flash 增量的主体是 `TMC_DEBUG`（约 9.5KB）。
+
+#### 实机验证结果
+
+`M122` 已通过（XYZ 三轴一致）：
+
+```text
+Address		3	3	3
+Set current	800	800	800
+RMS current	795	795	795
+MAX current	1121	1121	1121
+Run current	25/31	25/31	25/31
+Hold current	12/31	12/31	12/31
+msteps		16	16	16
+interp		true	true	true
+PWM thresh.	98	98	658      ([mm/s] 100 / 100 / 3)
+Driver registers:
+		X	0x80:0C:00:C0
+Testing X connection... OK
+Testing Y connection... OK
+Testing Z connection... OK
+```
+
+- `msteps 16` 与 `X_MICROSTEPS 16` 一致；`interp true` = 内部 1/256 插值
+- `RMS 795 / MAX 1121` 与 `X_CURRENT 800` 一致（800 × 1.414 ≈ 1131）
+- `Hold current 12/31` ≈ 运行电流的一半，来自 `HOLD_MULTIPLIER 0.5`
+- 未接电机时 `olb`/`ola` 报开路；接上电机后消失 —— 可当**接线检查**用
+- **XYZ 方向实测正确**（按官方说明翻转 `INVERT_*_DIR` 后）
+
+#### LCD "TMC 驱动器"菜单三个参数的取舍
+
+| 菜单项 | 对应 | 建议 |
+| --- | --- | --- |
+| 驱动电流 | `M906` | 保持 800 mA RMS 起步；连续打印后摸电机，烫手就降、丢步就升 |
+| 混合阈值 | `M913` | 保持 X/Y `100 mm/s`、Z `3 mm/s`：打印全程 stealthChop，只有快速空移切 spreadCycle |
+| 步进模式 | `M569`（`stored.stealthChop_enabled`） | **不要手动改** —— 混合阈值由驱动硬件按速度自动切换，手动指定只在低速段生效 |
+
+改完任何参数都要 **`M500`** 保存（MKS wiki 也强调；LCD 走 Configuration → Store Settings）。
+
+关于 `M122` 里的 `stealthChop false`：那一行读的是**瞬时**模式（`tmc_util.cpp:622` 用
+`st.stealth()`），而且当时未接电机、驱动报了开路，状态不可信。要看**存储设定**应发不带参数的
+`M569`（`M569.cpp:171` 用 `get_stored_stealthChop()`）。
+
+#### `TMC_DEBUG` 是否可以关掉
+
+`M122.cpp:52-69` 的结构决定了取舍：
+
+| | 开着 | 关掉后 |
+| --- | --- | --- |
+| `M122` 详细表（电流/寄存器/`ot`/`otpw`/`olb`/`ola`） | ✅ | ❌ |
+| `M122 V`（原始寄存器）、`M122 S`（连续监控） | ✅ | ❌ |
+| `M122` 连接自检（`Testing ... OK`） | ✅ | ✅ 仍有 |
+| 开机自检与 LCD 驱动掉线提示 | ✅ | ✅ 仍有（由 `HAS_TRINAMIC_CONFIG` 决定，`MarlinCore.cpp:1642`） |
+| `M906` / `M569` / `M913` | ✅ | ✅ 不受影响 |
+| Flash | 191608 | 省约 9.5KB |
+
+建议**全部验收完成、出正式发布包之前**再关，以保留开路与过温诊断能力。
+
+#### 回退方式
+
+```powershell
+git switch codex/minitree-t3-lts-2.1.2-migration
+python -m platformio run -e mega2560
+# 重新刷机即回到纯 A4988 配置
+```
+
+刷机命令与 2.3.1 一致（avrdude `-D`，保留 EEPROM）。
+
 ## 3. 核心功能逐项核对
 
 | ID | 旧版功能 | Marlin 2.1.2 处理 | 状态 |
