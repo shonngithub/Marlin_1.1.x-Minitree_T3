@@ -3001,9 +3001,13 @@
    * Set *_SERIAL_TX_PIN and *_SERIAL_RX_PIN to match for all drivers
    * on the same serial port, either here or in your board's pins file.
    */
-  //#define  X_SLAVE_ADDRESS 0
-  //#define  Y_SLAVE_ADDRESS 0
-  //#define  Z_SLAVE_ADDRESS 0
+  // MiniTree T3: XYZ drivers are jumpered M0+M1 = VCC. In UART mode those pins select the
+  // slave address (see the table above: both HIGH = 3), not the microstep resolution, which
+  // the firmware sets over UART. Without this the drivers listen on address 3 while Marlin
+  // talks to address 0.
+  #define  X_SLAVE_ADDRESS 3
+  #define  Y_SLAVE_ADDRESS 3
+  #define  Z_SLAVE_ADDRESS 3
   //#define X2_SLAVE_ADDRESS 0
   //#define Y2_SLAVE_ADDRESS 0
   //#define Z2_SLAVE_ADDRESS 0
